@@ -1,178 +1,206 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
-  Animated,
-  Image,
-  Dimensions
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
-import { Audio } from 'expo-av';
-
-const { width } = Dimensions.get('window');
-const cardSize = width * 0.6;
-const cardHeight = cardSize * 0.6;
 
 export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
-  const [gameData, setGameData] = useState(null);
-  const flipAnimation = useRef(new Animated.Value(0)).current;
+  const [loading, setLoading] = useState(true);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [questionExample, setQuestionExample] = useState(null);
+  const [answerExample, setAnswerExample] = useState(null);
+  const [selectedChoice, setSelectedChoice] = useState(null); // null, 'pair', 'notPair'
+  const [answered, setAnswered] = useState(false);
+  
+  // Determine if the question and answer pair (50% chance)
+  const isPair = useMemo(() => Math.random() < 0.5, [questionExample, answerExample]);
 
-  const parseCardData = (card) => {
-    try {
-      return {
-        ...card,
-        examples: card.examples ? JSON.parse(card.examples) : [],
-        unsplashImages: card.unsplashImages ? JSON.parse(card.unsplashImages) : []
-      };
-    } catch (error) {
-      console.error("Error parsing card data:", error);
-      return card;
-    }
-  };
-
+  // Initialize and select a random card and examples
   useEffect(() => {
-    const initializeGame = () => {
-      if (!dueCards?.length) return;
+    if (!dueCards || dueCards.length === 0) return;
+    
+    const init = async () => {
+      setLoading(true);
       
-      const targetIndex = Math.floor(Math.random() * dueCards.length);
-      const targetCard = parseCardData(dueCards[targetIndex]);
-      const isPair = Math.random() < 0.5;
-      const nonPairCard = dueCards.find(card => card.id !== targetCard.id);
-      const imageCard = isPair ? targetCard : parseCardData(nonPairCard);
-      
-      setGameData({ targetCard, imageCard, isPair });
+      try {
+        // Select a random card that has examples
+        const cardsWithExamples = dueCards.filter(card => {
+          try {
+            const examples = card.examples ? JSON.parse(card.examples) : [];
+            return examples.length > 1; // Need at least 2 examples
+          } catch (e) {
+            return false;
+          }
+        });
+        
+        if (cardsWithExamples.length === 0) {
+          Alert.alert('Not Enough Examples', 'None of the cards have enough example sentences.');
+          return;
+        }
+        
+        const randomCard = cardsWithExamples[Math.floor(Math.random() * cardsWithExamples.length)];
+        setSelectedCard(randomCard);
+        
+        // Parse examples and select two random ones
+        const examples = JSON.parse(randomCard.examples);
+        
+        // Select a random question example
+        const questionIndex = Math.floor(Math.random() * examples.length);
+        const question = examples[questionIndex];
+        setQuestionExample(question);
+        
+        // For the answer, either use the matching answer or a random different answer
+        if (isPair) {
+          // If pair, use the matching answer
+          setAnswerExample(question);
+        } else {
+          // If not pair, use a different example's answer
+          const otherExamples = examples.filter((_, index) => index !== questionIndex);
+          const randomOtherExample = otherExamples[Math.floor(Math.random() * otherExamples.length)];
+          setAnswerExample(randomOtherExample);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error("Error initializing PairOrNotPair:", error);
+        Alert.alert('Error', 'Could not load example sentences');
+        setLoading(false);
+      }
     };
-
-    initializeGame();
     
-    // Reset animation when game data changes
-    flipAnimation.setValue(0);
-    Animated.timing(flipAnimation, {
-      toValue: 1,
-      duration: 500,
-      delay: 500,
-      useNativeDriver: true,
-    }).start();
-  }, [dueCards, flipAnimation]);
+    init();
+  }, [dueCards]);
+  
+  // Reset component when showResult changes (new round)
+  useEffect(() => {
+    setSelectedChoice(null);
+    setAnswered(false);
+  }, [showResult]);
 
-  const frontInterpolate = flipAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '180deg'],
-  });
-  const backInterpolate = flipAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['180deg', '360deg'],
-  });
-
-  // Updated answer handler to include a structured popupData object
-  const handleAnswerSelection = (userChoice) => {
-    if (!gameData) return;
+  const handleChoice = (choice) => {
+    if (answered || showResult) return;
     
-    const isCorrect = userChoice === gameData.isPair;
-    const targetCard = gameData.targetCard;
+    setSelectedChoice(choice);
+    setAnswered(true);
     
-    // Get random example
-    const examples = targetCard.examples || [];
-    const randomExample = examples.length > 0 
-      ? examples[Math.floor(Math.random() * examples.length)]
-      : null;
-
+    const isCorrect = (choice === 'pair' && isPair) || (choice === 'notPair' && !isPair);
+    
     // Build popup data string
-    let popupString = `${targetCard.front}\n`;
-    if (targetCard.phonetic) popupString += `${targetCard.phonetic}\n`;
-    if(targetCard.back) popupString += `${targetCard.back}\n`
-    if (randomExample) {
-      if (randomExample.question) popupString += `${randomExample.question}\n`;
-      if (randomExample.questionTranslation) popupString += `Translation: ${randomExample.questionTranslation}\n`;
+    let popupString = '';
+    
+    if (selectedCard) {
+      popupString += `${selectedCard.front}\n`;
+      if (selectedCard.phonetic) popupString += `${selectedCard.phonetic}\n`;
+      if (selectedCard.back) popupString += `${selectedCard.back}\n`;
     }
-
+    
+    popupString += `Question: ${questionExample.question}\n`;
+    popupString += `Answer: ${answerExample.answer}\n`;
+    popupString += `They ${isPair ? 'DO' : 'DO NOT'} form a pair.\n`;
+    popupString += `Your answer: ${choice === 'pair' ? 'They pair' : 'They don\'t pair'}\n`;
+    
+    // Call the onAnswer callback with the result
     onAnswer?.(isCorrect, popupString);
   };
 
-  if (!gameData) return null;
+  // Handle loading state
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading examples...</Text>
+      </View>
+    );
+  }
+  
+  // Handle case where no card or examples could be found
+  if (!selectedCard || !questionExample || !answerExample) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Not enough examples available</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.cardsContainer}>
-        {/* Top Card */}
-        <View style={styles.cardWrapper}>
-          <Animated.View
-            style={[
-              styles.card,
-              styles.cardFront,
-              { height: cardHeight, width: cardSize, transform: [{ rotateY: frontInterpolate }] },
-            ]}
-          >
-            <Image
-              source={require('../../asset/placeholder.png')}
-              style={styles.placeholderImage}
-            />
-          </Animated.View>
-          <Animated.View
-            style={[
-              styles.card,
-              styles.cardBack,
-              { height: cardHeight, width: cardSize, transform: [{ rotateY: backInterpolate }] },
-            ]}
-          >
-            <View style={styles.cardContent}>
-              <Text style={styles.word}>{gameData.targetCard?.front}</Text>
-              <Text style={styles.phonetic}>{gameData.targetCard?.phonetic}</Text>
-            </View>
-          </Animated.View>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text style={styles.andText}>AND</Text>
-          <View style={styles.line} />
-        </View>
-
-        {/* Bottom Card */}
-        <View style={styles.cardWrapper}>
-          <Animated.View
-            style={[
-              styles.card,
-              styles.cardFront,
-              { height: cardHeight, width: cardSize, transform: [{ rotateY: frontInterpolate }] },
-            ]}
-          >
-            <Image
-              source={require('../../asset/placeholder.png')}
-              style={styles.placeholderImage}
-            />
-          </Animated.View>
-          <Animated.View
-            style={[
-              styles.card,
-              styles.cardBack,
-              { height: cardHeight, width: cardSize, transform: [{ rotateY: backInterpolate }] },
-            ]}
-          >
-            <View style={styles.cardContent}>
-              <Text style={styles.meaning}>{gameData.imageCard?.back}</Text>
-            </View>
-          </Animated.View>
-        </View>
+      <Text style={styles.title}>Do These Sentences Match?</Text>
+      
+      {/* Question Section */}
+      <View style={styles.sentenceContainer}>
+        <Text style={styles.sentenceLabel}>Question:</Text>
+        <Text style={styles.sentenceText}>{questionExample.question}</Text>
+        {questionExample.questionPhonetic && (
+          <Text style={styles.phoneticText}>{questionExample.questionPhonetic}</Text>
+        )}
+        {questionExample.questionTranslation && (
+          <Text style={styles.translationText}>{questionExample.questionTranslation}</Text>
+        )}
       </View>
-
-      {/* Answer Buttons */}
-      <View style={styles.buttonContainer}>
+      
+      {/* Answer Section */}
+      <View style={styles.sentenceContainer}>
+        <Text style={styles.sentenceLabel}>Answer:</Text>
+        <Text style={styles.sentenceText}>{answerExample.answer}</Text>
+        {answerExample.answerPhonetic && (
+          <Text style={styles.phoneticText}>{answerExample.answerPhonetic}</Text>
+        )}
+        {answerExample.translation && (
+          <Text style={styles.translationText}>{answerExample.translation}</Text>
+        )}
+      </View>
+      
+      {/* Choices */}
+      <View style={styles.choicesContainer}>
         <TouchableOpacity
-          style={styles.button}
-          onPress={() => handleAnswerSelection(true)}
+          style={[
+            styles.choiceButton,
+            selectedChoice === 'pair' && styles.selectedButton,
+            answered && isPair && styles.correctButton,
+            answered && !isPair && selectedChoice === 'pair' && styles.incorrectButton
+          ]}
+          onPress={() => handleChoice('pair')}
+          disabled={answered || showResult}
         >
-          <Text style={styles.buttonText}>Pair</Text>
+          <Text style={styles.choiceButtonText}>They Match</Text>
         </TouchableOpacity>
+        
         <TouchableOpacity
-          style={styles.button}
-          onPress={() => handleAnswerSelection(false)}
+          style={[
+            styles.choiceButton,
+            selectedChoice === 'notPair' && styles.selectedButton,
+            answered && !isPair && styles.correctButton,
+            answered && isPair && selectedChoice === 'notPair' && styles.incorrectButton
+          ]}
+          onPress={() => handleChoice('notPair')}
+          disabled={answered || showResult}
         >
-          <Text style={styles.buttonText}>Not Pair</Text>
+          <Text style={styles.choiceButtonText}>They Don't Match</Text>
         </TouchableOpacity>
       </View>
+      
+      {/* Feedback Section */}
+      {answered && (
+        <View style={styles.feedbackContainer}>
+          <Text style={[
+            styles.feedbackText,
+            (selectedChoice === 'pair' && isPair) || (selectedChoice === 'notPair' && !isPair) 
+              ? styles.correctText 
+              : styles.incorrectText
+          ]}>
+            {(selectedChoice === 'pair' && isPair) || (selectedChoice === 'notPair' && !isPair) 
+              ? "Correct!" 
+              : "Incorrect"}
+          </Text>
+          <Text style={styles.answerText}>
+            These sentences {isPair ? 'DO match' : 'DO NOT match'}.
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -180,91 +208,111 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
     alignItems: 'center',
     padding: 15,
     backgroundColor: 'rgba(255,255,255,0.8)',
     borderRadius: 20,
     margin: 10,
-    width: '100%',
   },
-  cardsContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardWrapper: {
-    marginVertical: 10,
-    height: cardHeight,
-    width: cardSize,
-  },
-  card: {
-    position: 'absolute',
-    borderRadius: 15,
-    backfaceVisibility: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardFront: {
-    backgroundColor: 'transparent',
-  },
-  cardBack: {
-    backgroundColor: 'white',
-  },
-  placeholderImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 15,
-  },
-  cardContent: {
-    padding: 15,
-    alignItems: 'center',
-  },
-  word: {
+  title: {
     fontSize: 20,
-    color: '#2D2D2D',
-    marginBottom: 5,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    fontFamily: 'PressStart2P',
+    textAlign: 'center',
   },
-  phonetic: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 5,
-  },
-  meaning: {
+  loadingText: {
+    marginTop: 10,
     fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: 'red',
+    textAlign: 'center',
+  },
+  sentenceContainer: {
+    width: '100%',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 15,
+  },
+  sentenceLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#555',
+  },
+  sentenceText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  phoneticText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: 5,
+  },
+  translationText: {
+    fontSize: 14,
     color: '#333',
   },
-  buttonContainer: {
+  choicesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    paddingVertical: 10,
+    marginTop: 10,
+    marginBottom: 20,
   },
-  button: {
+  choiceButton: {
     flex: 1,
-    backgroundColor: '#007AFF',
-    borderRadius: 15,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
     padding: 15,
-    marginHorizontal: 5,
+    margin: 5,
     alignItems: 'center',
   },
-  buttonText: {
-    fontSize: 12,
-    color: 'white',
-    fontFamily: 'PressStart2P',
+  selectedButton: {
+    borderColor: '#007AFF',
+    borderWidth: 2,
+    backgroundColor: '#f0f8ff',
   },
-  divider: {
-    flexDirection: 'row',
+  correctButton: {
+    borderColor: '#28a745',
+    backgroundColor: '#d4edda',
+  },
+  incorrectButton: {
+    borderColor: '#dc3545',
+    backgroundColor: '#f8d7da',
+  },
+  choiceButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  feedbackContainer: {
+    width: '100%',
+    padding: 15,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 10,
     alignItems: 'center',
-    marginVertical: 20,
-    width: '90%',
   },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E0E0E0',
+  feedbackText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
   },
-  andText: {
-    marginHorizontal: 15,
-    color: '#6C757D',
+  correctText: {
+    color: 'green',
+  },
+  incorrectText: {
+    color: 'red',
+  },
+  answerText: {
+    fontSize: 16,
   },
 });

@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Animated,
   ScrollView,
+  Easing,
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import PairOrNotPair from './learningComponent/2PairOrNotPair';
@@ -22,9 +23,62 @@ import SentencePairOrNotPair from './learningComponent/7PairOrNotPair';
 import Hangman from './learningComponent/0Hangman';
 import PhoneticChoice from './learningComponent/8WhichPhonetic';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import catAnimations from './CatAnimations.jsx';
+import { RunningCat, AnimatedCat } from './CatAnimations.jsx';
 
 const db = SQLite.openDatabaseSync('mydb.db');
 const { width, height } = Dimensions.get('window');
+
+// Add adventure situations - 20 different scenarios
+const adventureSituations = [
+  "Kitty ventures out of the house looking for adventure...",
+  "Kitty discovers a mysterious alley with glowing eyes watching from the shadows...",
+  "Kitty climbs to the top of a tall tree and surveys its kingdom from above...",
+  "Kitty finds an unattended fish market stall with delicious treasures...",
+  "Kitty follows a butterfly through a colorful garden of strange plants...",
+  "Kitty sneaks into a neighbor's backyard BBQ party...",
+  "Kitty explores an abandoned warehouse full of interesting smells...",
+  "Kitty races against neighborhood squirrels in the park...",
+  "Kitty discovers a warm laundry basket fresh from the dryer...",
+  "Kitty investigates strange noises coming from under the porch...",
+  "Kitty finds a sunny spot by the window in the library...",
+  "Kitty follows the scent of cooking to a restaurant's back door...",
+  "Kitty chases fallen leaves blowing in the autumn wind...",
+  "Kitty finds a forgotten toy mouse under the couch...",
+  "Kitty stalks the mysterious red dot that appears on walls...",
+  "Kitty patrols the neighborhood fence line looking for intruders...",
+  "Kitty discovers a box left on the doorstep and investigates...",
+  "Kitty watches birds at the feeder through the window...",
+  "Kitty explores the roof and finds a perfect napping spot...",
+  "Kitty follows a trail of interesting scents through the garden..."
+];
+
+// Add good and bad outcomes for each round
+const goodOutcomes = [
+  "The sushi chef one block away gave kitty some raw sashimi. Hunger -2.",
+  "A kind elderly woman offered kitty some fresh cream. Thirst -3.",
+  "Kitty found a sunny spot to nap in the park. Energy +3.",
+  "Children gently petted kitty and gave treats. Happiness +2.",
+  "Kitty found an open window to a warm house. Comfort +3.",
+  "A family having a picnic shared some turkey. Hunger -3.",
+  "Kitty discovered a hidden cache of catnip. Joy +4.",
+  "A friendly dog surprisingly offered to share toys. Friendship +2.",
+  "Kitty was adopted for the day by a nice family. Love +3.",
+  "Kitty found a comfortable box to hide in. Security +2."
+];
+
+const badOutcomes = [
+  "Kitty got chased by a neighborhood dog. Pride -1.",
+  "It started to rain and kitty got soaked. Comfort -2.",
+  "Kitty got stuck in a tree and needed help. Dignity -3.",
+  "Kitty knocked over a trash can making a mess. Stealth -2.",
+  "A grumpy homeowner shooed kitty away. Feelings -1.",
+  "Kitty's prey escaped at the last moment. Hunting -2.",
+  "Kitty stepped in a puddle and got paws wet. Comfort -1.",
+  "Kitty got lost and took hours to find home. Energy -3.",
+  "Kitty was startled by a loud car horn. Courage -2.",
+  "A rival cat challenged kitty's territory. Confidence -1."
+];
 
 /* -------------------------------
    CatAnimation Component (Frame-by-Frame)
@@ -73,49 +127,74 @@ function GameTemplate({
   hideConfirm,
   spriteSrc,
   spriteFrames,
+  adventureText
 }) {
   const popupScale = useRef(new Animated.Value(0.8)).current;
   const popupOpacity = useRef(new Animated.Value(0)).current;
   const popupTranslate = useRef(new Animated.Value(50)).current;
+  const [showingPopup, setShowingPopup] = useState(false);
 
+  // Handle popup appearance and animations
   useEffect(() => {
     if (toastMessage) {
+      setShowingPopup(true);
+      
       Animated.parallel([
         Animated.timing(popupScale, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.timing(popupOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
         Animated.timing(popupTranslate, { toValue: 0, duration: 300, useNativeDriver: true }),
       ]).start();
     } else {
+      setShowingPopup(false);
+      
       popupOpacity.setValue(0);
       popupScale.setValue(0.8);
       popupTranslate.setValue(50);
     }
   }, [toastMessage]);
 
+  // Calculate progress percentage for round progress bar
+  const roundProgress = (currentRound / totalRounds) * 100;
+
   return (
     <ImageBackground source={require('../asset/background.png')} style={styles.bgImage}>
       <View style={styles.container}>
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={onBack} style={styles.navButton}>
-            <Text style={styles.navButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onSkip} style={styles.navButton}>
-            <Text style={styles.navButtonText}>Skip →</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Lives</Text>
-            <Text style={styles.statValue}>{lives}</Text>
+          {/* Navigation Buttons at the top */}
+          <View style={styles.navButtonsContainer}>
+            <TouchableOpacity onPress={onBack} style={styles.navButton}>
+              <Text style={styles.navButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onSkip} style={styles.navButton}>
+              <Text style={styles.navButtonText}>Skip →</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Round</Text>
-            <Text style={styles.statValue}>{currentRound}/{totalRounds}</Text>
+          
+          {/* Stats below navigation buttons */}
+          <View style={styles.statsInNav}>
+            <View style={styles.statItem}>
+              <Text style={styles.statIcon}>❤️</Text>
+              <Text style={styles.statValue}>{lives}</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <View style={styles.roundProgress}>
+                <Text style={styles.statLabel}>Round {currentRound}/{totalRounds}</Text>
+                <View style={styles.progressBarContainer}>
+                  <View style={[styles.progressBar, { width: `${roundProgress}%` }]} />
+                </View>
+              </View>
+            </View>
+            
+            <View style={styles.statItem}>
+              <Text style={styles.statIcon}>💰</Text>
+              <Text style={styles.statValue}>{gold}</Text>
+            </View>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Gold</Text>
-            <Text style={styles.statValue}>{gold}</Text>
+          
+          {/* Cat Adventure Text Container - smaller text, full width */}
+          <View style={styles.catAnimationContainer}>
+            <Text style={styles.adventureText}>{adventureText || "Kitty ventures out..."}</Text>
           </View>
         </View>
 
@@ -133,21 +212,20 @@ function GameTemplate({
             ]}
           >
             <View style={styles.popupContent}>
-              {spriteSrc && <CatAnimation spriteSrc={spriteSrc} frames={spriteFrames} />}
-
-              <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.popupTitle}>{toastMessage}</Text>
-                {popupData && (
+              <Text style={styles.popupTitle}>{toastMessage}</Text>
+              
+              {popupData && (
+                <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
                   <View style={styles.cardContainer}>
                     <View style={styles.cardContent}>
                       {popupData.split('\n').map((line, i) => (
-                        <Text key={i} style={styles.cardText}>{line}</Text>
+                        <Text key={i} style={styles.cardText}>{line.replace(/#/g, '')}</Text>
                       ))}
                     </View>
                   </View>
-                )}
-              </ScrollView>
-
+                </ScrollView>
+              )}
+              
               <TouchableOpacity onPress={onConfirm} style={styles.popupButton}>
                 <Text style={styles.popupButtonText}>{actionButtonText}</Text>
               </TouchableOpacity>
@@ -185,11 +263,11 @@ const CardResult = ({ card, results, originalCard }) => {
         </View>
         <View style={styles.cardResultRow}>
           <Text style={styles.cardResultLabel}>Last Review:</Text>
-          <Text style={styles.cardResultValue}>{new Date(card.lastReviewDate).toLocaleDateString()}</Text>
+          <Text style={styles.cardResultValue}>{new Date(card.lastReviewDate).toLocaleString()}</Text>
         </View>
         <View style={styles.cardResultRow}>
           <Text style={styles.cardResultLabel}>Next Review:</Text>
-          <Text style={styles.cardResultValue}>{new Date(card.nextReviewDate).toLocaleDateString()}</Text>
+          <Text style={styles.cardResultValue}>{new Date(card.nextReviewDate).toLocaleString()}</Text>
         </View>
         <View style={styles.cardResultRow}>
           <Text style={styles.cardResultLabel}>Performance:</Text>
@@ -235,15 +313,17 @@ export default function Review() {
   const [roundToCardActivityMap, setRoundToCardActivityMap] = useState({});
   const [modifiedCards, setModifiedCards] = useState({});
   const [originalCards, setOriginalCards] = useState({});
+  const [adventureText, setAdventureText] = useState(adventureSituations[0]);
 
   const goodEvents = [
-    { message: 'Correct!\n Found grilled fish\nHunger -3', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Dance.png'), frames: 4 },
-    { message: 'Correct!\n Got head pats\n+2 gold', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png'), frames: 10 },
+    { message: 'Correct!\nThe sushi chef one block away gave it raw sashimi.\nHunger -2', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Dance.png'), frames: 4 },
+    { message: 'Correct!\nKitty found a sunny spot to nap in the park.\nEnergy +3', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png'), frames: 10 },
+    { message: 'Correct!\nA kind neighbor gave kitty some treats.\n+2 gold', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png'), frames: 10 },
   ];
 
   const badEvents = [
-    { message: '😾 Wrong!\n Got chased away\nPride -1', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Hurt.png'), frames: 8 },
-    { message: '😾 Wrong!\n Caught in rain\nEnergy -2', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Sleeping.png'), frames: 4 },
+    { message: 'Wrong!\nKitty got chased by a neighborhood dog.\nPride -1', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Hurt.png'), frames: 8 },
+    { message: 'Wrong!\nKitty got caught in the rain.\nEnergy -2', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Sleeping.png'), frames: 4 },
   ];
 
   // Function to update a card's SRS parameters based on results
@@ -253,14 +333,23 @@ export default function Review() {
     if (correct) {
       // All questions for this card were answered correctly
       const lastReviewDate = new Date().toISOString();
-      const diffDays = Math.ceil(
-        (new Date(card.nextReviewDate) - new Date(card.lastReviewDate)) / (1000 * 60 * 60 * 24)
-      );
+
+      let diffHours = 0
+
+      if (card.nextReviewDate !== card.lastReviewDate) {
+        console.log(`this is when they are different: ${diffHours}`)
+        diffHours = Math.ceil(
+          (new Date(card.nextReviewDate) - new Date(card.lastReviewDate)) / (1000 * 60 * 60)
+        )
+      } else {
+        console.log(`this is when they are the same: ${diffHours}`)
+        diffHours = 6
+      }
+      
       
       // Calculate new interval based on ease factor (default 1.5)
-      const newDiffDays = Math.max(1, Math.round(diffDays * parseFloat(card.easeFactor || 1.5)));
       const nextReviewDate = new Date();
-      nextReviewDate.setDate(nextReviewDate.getDate() + newDiffDays);
+      nextReviewDate.setHours(nextReviewDate.getHours() + diffHours * card.easeFactor)
       
       newCard.lastReviewDate = lastReviewDate;
       newCard.nextReviewDate = nextReviewDate.toISOString();
@@ -446,8 +535,11 @@ export default function Review() {
       setModifiedCards(newModifiedCards);
       setShowEvaluation(true);
     } else {
-      // Move to next round
+      // Move to next round and update adventure text
       setCurrentRound(r => r + 1);
+      // Set a new random adventure text from the array
+      const nextIndex = Math.floor(Math.random() * adventureSituations.length);
+      setAdventureText(adventureSituations[nextIndex]);
     }
   };
 
@@ -487,12 +579,29 @@ export default function Review() {
       handleRoundComplete();
     } else if (isAnswerLocked) {
       const correct = isCorrectAnswer;
-      const event = (correct ? goodEvents : badEvents)[Math.floor(Math.random() * (correct ? goodEvents.length : badEvents.length))];
-      setToastType(correct ? 'correct' : 'wrong');
-      setToastMessage(event.message);
-      setCurrentSprite(event.sprite);
-      setCurrentFrames(event.frames);
+      const animation = catAnimations.getRandomAnimationWithMessage(correct);
+      
+      // Update adventure text based on correct/incorrect answer
+      if (correct) {
+        const goodIndex = Math.floor(Math.random() * goodOutcomes.length);
+        const goodEvent = goodEvents[Math.floor(Math.random() * goodEvents.length)];
+        setAdventureText(goodOutcomes[goodIndex]);
+        setToastType('correct');
+        setToastMessage('Correct!'); // Simplified message
+        setCurrentSprite(goodEvent.sprite);
+        setCurrentFrames(goodEvent.frames);
+      } else {
+        const badIndex = Math.floor(Math.random() * badOutcomes.length);
+        const badEvent = badEvents[Math.floor(Math.random() * badEvents.length)];
+        setAdventureText(badOutcomes[badIndex]);
+        setToastType('wrong');
+        setToastMessage('Wrong!'); // Simplified message
+        setCurrentSprite(badEvent.sprite);
+        setCurrentFrames(badEvent.frames);
+      }
+      
       setShowResult(true);
+      
       if (correct) setGold(g => g + 10);
       else setLives(l => l - 1);
       setProgress(p => Math.min(p + 100 / totalRounds, 100));
@@ -606,6 +715,7 @@ export default function Review() {
         hideConfirm={!showResult}
         spriteSrc={currentSprite}
         spriteFrames={currentFrames}
+        adventureText={adventureText}
       >
         {currentCard && !showResult && (
           <>
@@ -689,35 +799,202 @@ export default function Review() {
 }
 
 const styles = StyleSheet.create({
-  bgImage: { flex: 1 },
-  container: { flex: 1, paddingTop: 30 },
-  navBar: { flexDirection: 'row', justifyContent: 'space-between', padding: 10, backgroundColor: 'rgba(0,0,0,0.6)', marginHorizontal: 10, borderRadius: 10, marginTop: 10 },
-  navButton: { padding: 10 },
-  navButtonText: { color: 'white', fontSize: 16, fontFamily: 'PressStart2P' },
-  statsContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, marginVertical: 5 },
-  statBox: { backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 15, padding: 10, alignItems: 'center', marginHorizontal: 4, minWidth: 90, elevation: 3 },
-  statLabel: { fontFamily: 'PressStart2P', fontSize: 10, color: '#333', marginBottom: 3 },
-  statValue: { fontFamily: 'PressStart2P', fontSize: 14, color: '#333' },
-  contentArea: { flex: 1, width: '100%', padding: 20, alignItems: 'center', justifyContent: 'center' },
-  confirmButton: { backgroundColor: '#FF8C00', borderRadius: 25, paddingVertical: 15, marginHorizontal: 20, elevation: 8 },
-  confirmButtonText: { fontFamily: 'PressStart2P', fontSize: 20, color: 'white', textAlign: 'center' },
+  bgImage: { 
+    flex: 1 
+  },
+  
+  container: { 
+    flex: 1, 
+    paddingTop: 30 
+  },
+  
+  // Updated navbar styles
+  navBar: { 
+    flexDirection: 'column', 
+    justifyContent: 'flex-start', 
+    padding: 15, 
+    backgroundColor: 'rgba(0,0,0,0.6)', 
+    marginHorizontal: 10, 
+    borderRadius: 10, 
+    marginTop: 10,
+  },
+  
+  catAnimationContainer: {
+    width: '100%',
+    height: 60,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 5,
+  },
+  
+  adventureText: {
+    fontFamily: 'PressStart2P',
+    fontSize: 10,
+    color: 'white',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  
+  navButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  
+  statsInNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 8
+  },
+  
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  statIcon: {
+    fontSize: 18,
+    marginRight: 4
+  },
+  
+  statValue: { 
+    fontFamily: 'PressStart2P', 
+    fontSize: 14, 
+    color: 'white'
+  },
+  
+  statLabel: {
+    fontFamily: 'PressStart2P',
+    fontSize: 10,
+    color: 'white',
+    marginBottom: 3
+  },
+  
+  roundProgress: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 150
+  },
+  
+  progressBarContainer: {
+    width: '100%',
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 4,
+    overflow: 'hidden'
+  },
+  
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#FFD700',
+    borderRadius: 4
+  },
+  
+  contentArea: { 
+    flex: 1, 
+    width: '100%', 
+    padding: 20, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  
+  navButton: { 
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+    marginHorizontal: 5,
+    flex: 1,
+    alignItems: 'center',
+  },
+  
+  navButtonText: { 
+    color: 'white', 
+    fontSize: 14, 
+    fontFamily: 'PressStart2P' 
+  },
+  
   popupContainer: { 
     position: 'absolute',
-    top: height * 0.22,
-    left: 20,
-    right: 20,
+    top: 230, // Add more gap below the nav bar
+    bottom: 20, // Stretch all the way down to near the bottom
+    alignSelf: 'center',
     zIndex: 999,
-    backgroundColor: '#4CAF50', borderRadius: 20, padding: 20, margin: 20, maxHeight: height * 0.6 
+    backgroundColor: '#4CAF50', 
+    borderRadius: 10, 
+    padding: 15, 
+    marginHorizontal: 10, // Match nav bar margins
+    width: width - 20, // Match nav bar width (screen width - margins)
   },
-  popupContent: { alignItems: 'center', justifyContent: 'space-between', flex: 1 },
-  scrollContainer: { width: '100%', maxHeight: height * 0.4 },
-  scrollContent: { paddingVertical: 10 },
-  cardContainer: { width: '100%', alignItems: 'center', marginVertical: 10 },
-  cardContent: { backgroundColor: 'white', borderRadius: 10, padding: 10, width: '100%' },
-  cardText: { fontFamily: 'PressStart2P', fontSize: 14, color: '#333', marginVertical: 2 },
-  popupButton: { backgroundColor: '#4CAF50', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 30, marginTop: 15, elevation: 5, alignSelf: 'stretch' },
-  popupButtonText: { fontFamily: 'PressStart2P', fontSize: 18, color: 'white', textAlign: 'center' },
-  popupTitle: { fontFamily: 'PressStart2P', fontSize: 16, color: 'white', textAlign: 'center', marginBottom: 15 },
+  
+  popupContent: { 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    width: '100%',
+    flex: 1,
+  },
+  
+  scrollContainer: { 
+    width: '100%',
+    flex: 1,
+    marginVertical: 10,
+  },
+  
+  scrollContent: { 
+    paddingVertical: 5,
+    alignItems: 'center',
+  },
+  
+  cardContainer: { 
+    width: '100%', 
+    alignItems: 'center', 
+    marginVertical: 5 
+  },
+  
+  cardContent: { 
+    backgroundColor: 'rgba(255,255,255,0.9)', 
+    borderRadius: 10, 
+    padding: 10, 
+    width: '100%' 
+  },
+  
+  cardText: { 
+    fontFamily: 'System',
+    fontSize: 16, 
+    color: '#333', 
+    marginVertical: 2,
+    textAlign: 'center',
+  },
+  
+  popupButton: { 
+    backgroundColor: 'rgba(0,0,0,0.2)', 
+    borderRadius: 10, 
+    paddingVertical: 10, 
+    paddingHorizontal: 20, 
+    marginTop: 15, 
+    width: '100%'
+  },
+  
+  popupButtonText: { 
+    fontFamily: 'PressStart2P', 
+    fontSize: 18, 
+    color: 'white', 
+    textAlign: 'center' 
+  },
+  
+  popupTitle: { 
+    fontFamily: 'PressStart2P', 
+    fontSize: 20, 
+    color: 'white', 
+    textAlign: 'center', 
+    marginBottom: 15 
+  },
   
   // Evaluation screen styles
   evaluationHeader: { 
@@ -728,23 +1005,28 @@ const styles = StyleSheet.create({
     margin: 10,
     marginTop: 50 
   },
+  
   evaluationTitle: { 
     fontFamily: 'PressStart2P', 
     fontSize: 24, 
     color: 'white', 
     marginBottom: 10 
   },
+  
   evaluationSubtitle: { 
     fontFamily: 'PressStart2P', 
     fontSize: 18, 
     color: '#FFD700' 
   },
+  
   evaluationScroll: { 
-    flex: 1, 
+    flex: 1 
   },
+  
   evaluationContent: { 
     padding: 10 
   },
+  
   evaluationSectionTitle: { 
     fontFamily: 'PressStart2P', 
     fontSize: 18, 
@@ -754,41 +1036,49 @@ const styles = StyleSheet.create({
     borderRadius: 10, 
     marginVertical: 10 
   },
+  
   cardResultContainer: { 
     backgroundColor: 'rgba(255,255,255,0.9)', 
     borderRadius: 15, 
     padding: 15, 
     marginBottom: 15 
   },
+  
   cardResultTitle: { 
     fontSize: 16, 
     fontWeight: 'bold',
     color: '#333', 
     marginBottom: 10 
   },
+  
   cardResultContent: { 
     backgroundColor: '#f5f5f5', 
     borderRadius: 10, 
     padding: 10 
   },
+  
   cardResultRow: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     marginVertical: 5 
   },
+  
   cardResultLabel: { 
     fontSize: 12, 
     color: '#666' 
   },
+  
   cardResultValue: { 
     fontSize: 12, 
     color: '#333' 
   },
+  
   evaluationButtons: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     padding: 20 
   },
+  
   evaluationButton: { 
     backgroundColor: '#FF8C00', 
     borderRadius: 20, 
@@ -796,10 +1086,11 @@ const styles = StyleSheet.create({
     flex: 1, 
     marginHorizontal: 5 
   },
+  
   evaluationButtonText: { 
     fontFamily: 'PressStart2P', 
     fontSize: 14, 
     color: 'white', 
     textAlign: 'center' 
-  }
+  },
 });

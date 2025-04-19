@@ -188,8 +188,9 @@ function CatFoodSlot() {
 // ----------------------------
 export default function IndexPage({ navigation }) {
   const [fontLoaded, setFontLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Add this useEffect for font loading
+  // Add this useEffect for font loading and initial loading screen
   useEffect(() => {
     const loadFont = async () => {
       await Font.loadAsync({
@@ -199,9 +200,15 @@ export default function IndexPage({ navigation }) {
     };
     
     loadFont();
+    
+    // Display loading screen for 2 seconds
+    const timer = setTimeout(() => {
+      
+    }, 2000);
+    
+    return () => clearTimeout(timer);
   }, []);
 
- 
   const [stats] = useState({
     hunger: 80,
     clean: 75,
@@ -323,7 +330,23 @@ export default function IndexPage({ navigation }) {
     }
   };
 
-   if (!fontLoaded) {
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'black' }}>
+        <Pressable 
+          onPress={() => setIsLoading(false)}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <Image 
+            source={require('../asset/front.webp')} 
+            style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+          />
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (!fontLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'black' }}>
         <Text style={{ color: 'white' }}>Loading...</Text>

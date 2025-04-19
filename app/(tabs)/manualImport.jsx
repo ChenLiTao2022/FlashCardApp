@@ -10,7 +10,9 @@ import {
   Switch,
   Image,
   ActivityIndicator,
-  Modal
+  Modal,
+  ImageBackground,
+  SafeAreaView
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system';
@@ -371,415 +373,415 @@ export default function App() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* Top Section */}
-      <View style={{ alignItems: 'center', marginBottom: 30 }}>
-        <Text style={{ fontSize: 30 }}>Create New Flash Card</Text>
-      </View>
-      
-      <View style={styles.aiButtonContainer}>
-        <TouchableOpacity onPress={() => router.push('/AIPage')} style={styles.aiButton}>
-          <Text style={styles.aiButtonText}>Generate With AI</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.customButton, {marginTop: 30}]} onPress={() => router.push('/Review')}>
-          <Text style={styles.customButtonText}>Go to Review</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.customButton, {marginTop: 30}]} onPress={() => router.push('/pet/pet')}>
-          <Text style={styles.customButtonText}>颜文字</Text>
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.globalToggleContainer}>
-        <Text style={styles.globalToggleLabel}>Show Phonetic</Text>
-        <Switch value={globalCheckbox} onValueChange={setGlobalCheckbox} />
-      </View>
-      
-      {/* Card Editor */}
-      {inputs.map((item, index) => (
-        <View key={index} style={styles.cardContainer}>
-          <Text style={styles.cardHeader}>Card {index + 1}</Text>
+    <ImageBackground source={require('../asset/background.png')} style={styles.background}>
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.container}>
+          {/* Top Section */}
+          <View style={{ alignItems: 'center', marginBottom: 30 }}>
+            <Text style={{ fontSize: 30, color: '#fff' }}>Create New Flash Card</Text>
+          </View>
           
-          {/* Foreign Word */}
-          <View style={styles.inputRow}>
-            <TextInput
-              style={[styles.input, styles.flexInput]}
-              placeholder="Foreign Word"
-              value={item.front}
-              onChangeText={text => {
-                const newInputs = [...inputs];
-                newInputs[index].front = text;
-                setInputs(newInputs);
-              }}
-            />
-            <TouchableOpacity 
-              onPress={() => playAudio(item.frontAudio)}
-              style={styles.audioButtonContainer}
-            >
-              <Text style={styles.audioButton}>🔊</Text>
+          <View style={styles.aiButtonContainer}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.aiButton}>
+              <Text style={styles.aiButtonText}>Generate With AI</Text>
             </TouchableOpacity>
           </View>
-          {globalCheckbox && (
-            <TextInput
-              style={styles.input}
-              placeholder="Phonetic"
-              value={item.phonetic}
-              onChangeText={text => {
-                const newInputs = [...inputs];
-                newInputs[index].phonetic = text;
-                setInputs(newInputs);
-              }}
-            />
-          )}
-          <TextInput
-            style={styles.input}
-            placeholder="Native Meaning"
-            value={item.back}
-            onChangeText={text => {
-              const newInputs = [...inputs];
-              newInputs[index].back = text;
-              setInputs(newInputs);
-            }}
-          />
           
-          {/* Search for Image */}
-          <TouchableOpacity
-            style={styles.imageButton}
-            onPress={() => onOpenImageSearch(index)}
-          >
-            <Text>📷 Search for Image</Text>
-          </TouchableOpacity>
+          <View style={styles.globalToggleContainer}>
+            <Text style={styles.globalToggleLabel}>Show Phonetic</Text>
+            <Switch value={globalCheckbox} onValueChange={setGlobalCheckbox} />
+          </View>
           
-          {/* Thumbnails */}
-          {item.unsplashImages && item.unsplashImages.length > 0 && (
-            <ScrollView horizontal style={styles.autoImagesContainer}>
-              {item.unsplashImages.map((imgUrl, i) => (
-                <View key={i} style={styles.imageWrapper}>
-                  <TouchableOpacity
+          {/* Card Editor */}
+          {inputs.map((item, index) => (
+            <View key={index} style={styles.cardContainer}>
+              <Text style={styles.cardHeader}>Card {index + 1}</Text>
+              
+              {/* Foreign Word */}
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={[styles.input, styles.flexInput]}
+                  placeholder="Foreign Word"
+                  value={item.front}
+                  onChangeText={text => {
+                    const newInputs = [...inputs];
+                    newInputs[index].front = text;
+                    setInputs(newInputs);
+                  }}
+                />
+                <TouchableOpacity 
+                  onPress={() => playAudio(item.frontAudio)}
+                  style={styles.audioButtonContainer}
+                >
+                  <Text style={styles.audioButton}>🔊</Text>
+                </TouchableOpacity>
+              </View>
+              {globalCheckbox && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Phonetic"
+                  value={item.phonetic}
+                  onChangeText={text => {
+                    const newInputs = [...inputs];
+                    newInputs[index].phonetic = text;
+                    setInputs(newInputs);
+                  }}
+                />
+              )}
+              <TextInput
+                style={styles.input}
+                placeholder="Native Meaning"
+                value={item.back}
+                onChangeText={text => {
+                  const newInputs = [...inputs];
+                  newInputs[index].back = text;
+                  setInputs(newInputs);
+                }}
+              />
+              
+              {/* Search for Image */}
+              <TouchableOpacity
+                style={styles.imageButton}
+                onPress={() => onOpenImageSearch(index)}
+              >
+                <Text>📷 Search for Image</Text>
+              </TouchableOpacity>
+              
+              {/* Thumbnails */}
+              {item.unsplashImages && item.unsplashImages.length > 0 && (
+                <ScrollView horizontal style={styles.autoImagesContainer}>
+                  {item.unsplashImages.map((imgUrl, i) => (
+                    <View key={i} style={styles.imageWrapper}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          const newInputs = [...inputs];
+                          newInputs[index].imageUrl = imgUrl;
+                          setInputs(newInputs);
+                        }}
+                      >
+                        <Image
+                          source={{ uri: imgUrl }}
+                          style={styles.thumbnailPreview}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.crossButton}
+                        onPress={() => onDeleteImage(index, imgUrl)}
+                      >
+                        <Text style={styles.crossButtonText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              
+              {/* Example Sentence Section */}
+              <Text style={styles.sectionHeader}>Example Sentence</Text>
+              <View style={styles.exampleSelector}>
+                {[0, 1, 2, 3, 4].map(num => (
+                  <TouchableOpacity 
+                    key={num} 
+                    style={[
+                      styles.exampleButton, 
+                      selectedExamples[index] === num && styles.exampleButtonActive
+                    ]}
                     onPress={() => {
-                      const newInputs = [...inputs];
-                      newInputs[index].imageUrl = imgUrl;
-                      setInputs(newInputs);
+                      const newSelected = [...selectedExamples];
+                      newSelected[index] = num;
+                      setSelectedExamples(newSelected);
                     }}
                   >
-                    <Image
-                      source={{ uri: imgUrl }}
-                      style={styles.thumbnailPreview}
-                      resizeMode="cover"
-                    />
+                    <Text style={ selectedExamples[index] === num 
+                      ? styles.exampleButtonTextActive 
+                      : styles.exampleButtonText }>
+                      {num + 1}
+                    </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.crossButton}
-                    onPress={() => onDeleteImage(index, imgUrl)}
-                  >
-                    <Text style={styles.crossButtonText}>X</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-          
-          {/* Example Sentence Section */}
-          <Text style={styles.sectionHeader}>Example Sentence</Text>
-          <View style={styles.exampleSelector}>
-            {[0, 1, 2, 3, 4].map(num => (
-              <TouchableOpacity 
-                key={num} 
-                style={[
-                  styles.exampleButton, 
-                  selectedExamples[index] === num && styles.exampleButtonActive
-                ]}
-                onPress={() => {
-                  const newSelected = [...selectedExamples];
-                  newSelected[index] = num;
-                  setSelectedExamples(newSelected);
-                }}
-              >
-                <Text style={ selectedExamples[index] === num 
-                  ? styles.exampleButtonTextActive 
-                  : styles.exampleButtonText }>
-                  {num + 1}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          
-          {/* Example Pair Inputs */}
-          {/* Question */}
-          <View style={styles.inputRow}>
-            <TextInput 
-              style={[styles.input, styles.flexInput]}
-              placeholder="Example Question"
-              value={item.examples[selectedExamples[index]]?.question}
-              onChangeText={text => {
-                const newInputs = [...inputs];
-                newInputs[index].examples[selectedExamples[index]].question = text;
-                setInputs(newInputs);
-              }}
-            />
-            <TouchableOpacity 
-              onPress={() => playAudio(item.examples[selectedExamples[index]]?.questionAudio)}
-              style={styles.audioButtonContainer}
-            >
-              <Text style={styles.audioButton}>🔊</Text>
-            </TouchableOpacity>
-          </View>
-
-          {globalCheckbox && (
-            <TextInput 
-              style={styles.input}
-              placeholder="Phonetic for Question"
-              value={item.examples[selectedExamples[index]]?.questionPhonetic}
-              onChangeText={text => {
-                const newInputs = [...inputs];
-                newInputs[index].examples[selectedExamples[index]].questionPhonetic = text;
-                setInputs(newInputs);
-              }}
-            />
-          )}
-
-          <TextInput 
-            style={[styles.input, {marginTop: -10, marginBottom: 30}]}
-            placeholder="Question Translation"
-            value={item.examples[selectedExamples[index]]?.questionTranslation}
-            onChangeText={text => {
-              const newInputs = [...inputs];
-              newInputs[index].examples[selectedExamples[index]].questionTranslation = text;
-              setInputs(newInputs);
-            }}
-          />
-          
-          
-          {/* Answer */}
-          <View style={styles.inputRow}>
-            <TextInput 
-              style={[styles.input, styles.flexInput]}
-              placeholder="Example Answer"
-              value={item.examples[selectedExamples[index]]?.answer}
-              onChangeText={text => {
-                const newInputs = [...inputs];
-                newInputs[index].examples[selectedExamples[index]].answer = text;
-                setInputs(newInputs);
-              }}
-            />
-            <TouchableOpacity 
-              onPress={() => playAudio(item.examples[selectedExamples[index]]?.answerAudio)}
-              style={styles.audioButtonContainer}
-            >
-              <Text style={styles.audioButton}>🔊</Text>
-            </TouchableOpacity>
-          </View>
-          {globalCheckbox && (
-            <TextInput 
-              style={styles.input}
-              placeholder="Phonetic for Answer"
-              value={item.examples[selectedExamples[index]]?.answerPhonetic}
-              onChangeText={text => {
-                const newInputs = [...inputs];
-                newInputs[index].examples[selectedExamples[index]].answerPhonetic = text;
-                setInputs(newInputs);
-              }}
-            />
-          )}
-          <TextInput 
-             style={[styles.input, {marginTop: -10}]}
-            placeholder="Answer Translation"
-            value={item.examples[selectedExamples[index]]?.translation}
-            onChangeText={text => {
-              const newInputs = [...inputs];
-              newInputs[index].examples[selectedExamples[index]].translation = text;
-              setInputs(newInputs);
-            }}
-          />
-
-          {/* Delete Card Button (Round Red Button) */}
-          <TouchableOpacity style={styles.roundDeleteButton} onPress={() => onDeleteCard(index)}>
-            <Text style={styles.roundDeleteButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
-      
-      {/* Add Card Button (Circular) */}
-      <View style={styles.addCardContainer}>
-        <TouchableOpacity style={styles.addCardButton} onPress={() => 
-          setInputs([...inputs, { 
-            front: '', 
-            back: '', 
-            phonetic: '',
-            imageUrl: '',
-            unsplashImages: [],
-            examples: defaultExamples,
-            frontAudio: '',
-            ...getDefaultTrackingData()
-          }])
-        }>
-          <Text style={styles.addCardText}>+</Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* Deck Title Input */}
-      <View style={styles.topContainer}>
-        <Text style={styles.topLabel}>Word Deck Title</Text>
-        <TextInput
-          style={styles.titleInput}
-          placeholder="Enter deck title"
-          value={inputTitle}
-          onChangeText={setInputTitle}
-        />
-      </View>
-      
-      {/* Bottom Global Buttons */}
-      <TouchableOpacity style={styles.customButton} onPress={onSubmit}>
-        <Text style={styles.customButtonText}>Save Deck</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.customButton} onPress={loadAllDecks}>
-        <Text style={styles.customButtonText}>Load All Decks</Text>
-      </TouchableOpacity>
-      
-      {availableDecks.length > 0 && (
-        <View style={styles.deckContainer}>
-          <Text style={styles.sectionHeader}>Available Decks</Text>
-          {availableDecks.map((deck, idx) => (
-            <TouchableOpacity key={idx} style={styles.deckButton} onPress={() => loadDeck(deck.name)}>
-              <Text style={styles.deckButtonText}>{deck.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-      
-      {displayToDo.length > 0 ? displayToDo.map(item => (
-        <View key={item.id} style={styles.savedCard}>
-          <Text>Front: {item.front}</Text>
-          <TouchableOpacity onPress={() => playAudio(item.frontAudio)}>
-            <Text style={styles.audioButton}>🔊</Text>
-          </TouchableOpacity>
-          <Text>Back: {item.back}</Text>
-          <Text>Phonetic: {item.phonetic}</Text>
-          <Text>Image URL: {item.imageUrl}</Text>
-          <Text>Examples:</Text>
-          {(() => {
-            let examples = [];
-            try {
-              examples = JSON.parse(item.examples);
-            } catch (error) {
-              console.error("Error parsing examples for card", item.front, error);
-              examples = item.examples;
-            }
-            return examples.map((ex, idx) => (
-              <View key={idx} style={styles.exampleRow}>
-                <Text style={{ fontWeight: 'bold' }}>Example {idx+1}:</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text>Question: {ex.question}</Text>
-                  <TouchableOpacity onPress={() => playAudio(ex.questionAudio)}>
-                    <Text style={styles.audioButton}> 🔊</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text>Q Translation: {ex.questionTranslation}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text>Answer: {ex.answer}</Text>
-                  <TouchableOpacity onPress={() => playAudio(ex.answerAudio)}>
-                    <Text style={styles.audioButton}> 🔊</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text>A Translation: {ex.translation}</Text>
+                ))}
               </View>
-            ));
-          })()}
-          <Text>Last Review Date: {item.lastReviewDate}</Text>
-          <Text>Next Review Date: {item.nextReviewDate}</Text>
-          <Text>Consecutive Correct Answers: {item.consecutiveCorrectAnswersCount}</Text>
-          <Text>Wrong Queue: {item.wrongQueue}</Text>
-          <Text>Ease Factor: {item.easeFactor}</Text>
-          <TouchableOpacity style={styles.deckButton} onPress={() => onDeleteCard(item.id)}>
-            <Text style={styles.deckButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      ))
-      : <Text style={{textAlign: 'center'}}>No cards to display.</Text>}
-      
-      <View style={styles.wipeContainer}>
-        <TouchableOpacity style={styles.customButton} onPress={dropAllTables}>
-          <Text style={styles.customButtonText}>Wipe Entire Database (Testing Only)</Text>
-        </TouchableOpacity>
-      </View>
-      
+              
+              {/* Example Pair Inputs */}
+              {/* Question */}
+              <View style={styles.inputRow}>
+                <TextInput 
+                  style={[styles.input, styles.flexInput]}
+                  placeholder="Example Question"
+                  value={item.examples[selectedExamples[index]]?.question}
+                  onChangeText={text => {
+                    const newInputs = [...inputs];
+                    newInputs[index].examples[selectedExamples[index]].question = text;
+                    setInputs(newInputs);
+                  }}
+                />
+                <TouchableOpacity 
+                  onPress={() => playAudio(item.examples[selectedExamples[index]]?.questionAudio)}
+                  style={styles.audioButtonContainer}
+                >
+                  <Text style={styles.audioButton}>🔊</Text>
+                </TouchableOpacity>
+              </View>
 
-      
-      {/* --- Modal for Image Search (using RN Modal) --- */}
-      <Modal visible={imageSearch.visible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.sectionHeader}>Search Images</Text>
-            {/* Search Field Row */}
-            <View style={styles.searchHeader}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Enter search term"
-                value={modalSearchTerm}
-                onChangeText={setModalSearchTerm}
-              />
-              <TouchableOpacity
-                style={styles.searchButton}
-                onPress={() => {
-                  // Allow search even if term is empty but then show error.
-                  if (!modalSearchTerm.trim()) {
-                    setImageSearch(prev => ({
-                      ...prev,
-                      error: 'No search term',
-                      images: [],
-                      loading: false
-                    }));
-                    return;
-                  }
-                  setImageSearch(prev => ({ ...prev, error: null, loading: true, images: [] }));
-                  searchImages(modalSearchTerm, 1);
+              {globalCheckbox && (
+                <TextInput 
+                  style={styles.input}
+                  placeholder="Phonetic for Question"
+                  value={item.examples[selectedExamples[index]]?.questionPhonetic}
+                  onChangeText={text => {
+                    const newInputs = [...inputs];
+                    newInputs[index].examples[selectedExamples[index]].questionPhonetic = text;
+                    setInputs(newInputs);
+                  }}
+                />
+              )}
+
+              <TextInput 
+                style={[styles.input, {marginTop: -10, marginBottom: 30}]}
+                placeholder="Question Translation"
+                value={item.examples[selectedExamples[index]]?.questionTranslation}
+                onChangeText={text => {
+                  const newInputs = [...inputs];
+                  newInputs[index].examples[selectedExamples[index]].questionTranslation = text;
+                  setInputs(newInputs);
                 }}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Search</Text>
+              />
+              
+              
+              {/* Answer */}
+              <View style={styles.inputRow}>
+                <TextInput 
+                  style={[styles.input, styles.flexInput]}
+                  placeholder="Example Answer"
+                  value={item.examples[selectedExamples[index]]?.answer}
+                  onChangeText={text => {
+                    const newInputs = [...inputs];
+                    newInputs[index].examples[selectedExamples[index]].answer = text;
+                    setInputs(newInputs);
+                  }}
+                />
+                <TouchableOpacity 
+                  onPress={() => playAudio(item.examples[selectedExamples[index]]?.answerAudio)}
+                  style={styles.audioButtonContainer}
+                >
+                  <Text style={styles.audioButton}>🔊</Text>
+                </TouchableOpacity>
+              </View>
+              {globalCheckbox && (
+                <TextInput 
+                  style={styles.input}
+                  placeholder="Phonetic for Answer"
+                  value={item.examples[selectedExamples[index]]?.answerPhonetic}
+                  onChangeText={text => {
+                    const newInputs = [...inputs];
+                    newInputs[index].examples[selectedExamples[index]].answerPhonetic = text;
+                    setInputs(newInputs);
+                  }}
+                />
+              )}
+              <TextInput 
+                 style={[styles.input, {marginTop: -10}]}
+                placeholder="Answer Translation"
+                value={item.examples[selectedExamples[index]]?.translation}
+                onChangeText={text => {
+                  const newInputs = [...inputs];
+                  newInputs[index].examples[selectedExamples[index]].translation = text;
+                  setInputs(newInputs);
+                }}
+              />
+
+              {/* Delete Card Button (Round Red Button) */}
+              <TouchableOpacity style={styles.roundDeleteButton} onPress={() => onDeleteCard(index)}>
+                <Text style={styles.roundDeleteButtonText}>Delete</Text>
               </TouchableOpacity>
             </View>
-            {/* If no search term is entered, show a helpful message */}
-            {!modalSearchTerm.trim() && (
-              <Text style={styles.errorText}>Please enter a search term above.</Text>
-            )}
-            {imageSearch.loading && <ActivityIndicator size="large" style={{ marginVertical: 10 }} />}
-            {imageSearch.error && <Text style={styles.errorText}>{imageSearch.error}</Text>}
-            <ScrollView contentContainerStyle={styles.imageGrid}>
-              {imageSearch.images.map((img, i) => {
-                const url = img.urls.small;
-                const isSelected = imageSearch.selectedImages.includes(url);
-                return (
-                  <TouchableOpacity key={i} onPress={() => toggleImageSelection(url)}>
-                    <View>
-                      <Image source={{ uri: url }} style={styles.imageItem} />
-                      {isSelected && (
-                        <View style={styles.selectedOverlay}>
-                          <Text style={styles.selectedText}>✓</Text>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity 
-              style={[styles.customButton, { alignSelf: 'center' }]}
-              onPress={confirmImageSelection}
-            >
-              <Text style={styles.customButtonText}>Confirm</Text>
+          ))}
+          
+          {/* Add Card Button (Circular) */}
+          <View style={styles.addCardContainer}>
+            <TouchableOpacity style={styles.addCardButton} onPress={() => 
+              setInputs([...inputs, { 
+                front: '', 
+                back: '', 
+                phonetic: '',
+                imageUrl: '',
+                unsplashImages: [],
+                examples: defaultExamples,
+                frontAudio: '',
+                ...getDefaultTrackingData()
+              }])
+            }>
+              <Text style={styles.addCardText}>+</Text>
             </TouchableOpacity>
-            <Text style={styles.poweredByText}>Powered by Unsplash</Text>
           </View>
-        </View>
-      </Modal>
-    </ScrollView>
+          
+          {/* Deck Title Input */}
+          <View style={styles.topContainer}>
+            <Text style={styles.topLabel}>Word Deck Title</Text>
+            <TextInput
+              style={styles.titleInput}
+              placeholder="Enter deck title"
+              value={inputTitle}
+              onChangeText={setInputTitle}
+            />
+          </View>
+          
+          {/* Bottom Global Buttons */}
+          <TouchableOpacity style={styles.customButton} onPress={onSubmit}>
+            <Text style={styles.customButtonText}>Save Deck</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.customButton} onPress={loadAllDecks}>
+            <Text style={styles.customButtonText}>Load All Decks</Text>
+          </TouchableOpacity>
+          
+          {availableDecks.length > 0 && (
+            <View style={styles.deckContainer}>
+              <Text style={styles.sectionHeader}>Available Decks</Text>
+              {availableDecks.map((deck, idx) => (
+                <TouchableOpacity key={idx} style={styles.deckButton} onPress={() => loadDeck(deck.name)}>
+                  <Text style={styles.deckButtonText}>{deck.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          
+          {displayToDo.length > 0 ? displayToDo.map(item => (
+            <View key={item.id} style={styles.savedCard}>
+              <Text>Front: {item.front}</Text>
+              <TouchableOpacity onPress={() => playAudio(item.frontAudio)}>
+                <Text style={styles.audioButton}>🔊</Text>
+              </TouchableOpacity>
+              <Text>Back: {item.back}</Text>
+              <Text>Phonetic: {item.phonetic}</Text>
+              <Text>Image URL: {item.imageUrl}</Text>
+              <Text>Examples:</Text>
+              {(() => {
+                let examples = [];
+                try {
+                  examples = JSON.parse(item.examples);
+                } catch (error) {
+                  console.error("Error parsing examples for card", item.front, error);
+                  examples = item.examples;
+                }
+                return examples.map((ex, idx) => (
+                  <View key={idx} style={styles.exampleRow}>
+                    <Text style={{ fontWeight: 'bold' }}>Example {idx+1}:</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text>Question: {ex.question}</Text>
+                      <TouchableOpacity onPress={() => playAudio(ex.questionAudio)}>
+                        <Text style={styles.audioButton}> 🔊</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text>Q Translation: {ex.questionTranslation}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text>Answer: {ex.answer}</Text>
+                      <TouchableOpacity onPress={() => playAudio(ex.answerAudio)}>
+                        <Text style={styles.audioButton}> 🔊</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text>A Translation: {ex.translation}</Text>
+                  </View>
+                ));
+              })()}
+              <Text>Last Review Date: {item.lastReviewDate}</Text>
+              <Text>Next Review Date: {item.nextReviewDate}</Text>
+              <Text>Consecutive Correct Answers: {item.consecutiveCorrectAnswersCount}</Text>
+              <Text>Wrong Queue: {item.wrongQueue}</Text>
+              <Text>Ease Factor: {item.easeFactor}</Text>
+              <TouchableOpacity style={styles.deckButton} onPress={() => onDeleteCard(item.id)}>
+                <Text style={styles.deckButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+          : <Text style={{textAlign: 'center'}}>No cards to display.</Text>}
+          
+          <View style={styles.wipeContainer}>
+            <TouchableOpacity style={styles.customButton} onPress={dropAllTables}>
+              <Text style={styles.customButtonText}>Wipe Entire Database (Testing Only)</Text>
+            </TouchableOpacity>
+          </View>
+          
+
+          
+          {/* --- Modal for Image Search (using RN Modal) --- */}
+          <Modal visible={imageSearch.visible} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContainer}>
+                <Text style={styles.sectionHeader}>Search Images</Text>
+                {/* Search Field Row */}
+                <View style={styles.searchHeader}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Enter search term"
+                    value={modalSearchTerm}
+                    onChangeText={setModalSearchTerm}
+                  />
+                  <TouchableOpacity
+                    style={styles.searchButton}
+                    onPress={() => {
+                      // Allow search even if term is empty but then show error.
+                      if (!modalSearchTerm.trim()) {
+                        setImageSearch(prev => ({
+                          ...prev,
+                          error: 'No search term',
+                          images: [],
+                          loading: false
+                        }));
+                        return;
+                      }
+                      setImageSearch(prev => ({ ...prev, error: null, loading: true, images: [] }));
+                      searchImages(modalSearchTerm, 1);
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Search</Text>
+                  </TouchableOpacity>
+                </View>
+                {/* If no search term is entered, show a helpful message */}
+                {!modalSearchTerm.trim() && (
+                  <Text style={styles.errorText}>Please enter a search term above.</Text>
+                )}
+                {imageSearch.loading && <ActivityIndicator size="large" style={{ marginVertical: 10 }} />}
+                {imageSearch.error && <Text style={styles.errorText}>{imageSearch.error}</Text>}
+                <ScrollView contentContainerStyle={styles.imageGrid}>
+                  {imageSearch.images.map((img, i) => {
+                    const url = img.urls.small;
+                    const isSelected = imageSearch.selectedImages.includes(url);
+                    return (
+                      <TouchableOpacity key={i} onPress={() => toggleImageSelection(url)}>
+                        <View>
+                          <Image source={{ uri: url }} style={styles.imageItem} />
+                          {isSelected && (
+                            <View style={styles.selectedOverlay}>
+                              <Text style={styles.selectedText}>✓</Text>
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity 
+                  style={[styles.customButton, { alignSelf: 'center' }]}
+                  onPress={confirmImageSelection}
+                >
+                  <Text style={styles.customButtonText}>Confirm</Text>
+                </TouchableOpacity>
+                <Text style={styles.poweredByText}>Powered by Unsplash</Text>
+              </View>
+            </View>
+          </Modal>
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingTop: 50, backgroundColor: '#f5f5f5' },
+  background: { flex: 1 },
+  safeArea: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
+  container: { padding: 20, paddingTop: 50, backgroundColor: 'transparent' },
   topContainer: { marginBottom: 20 },
-  topLabel: { fontSize: 18, marginBottom: 6, color: '#333' },
-  titleInput: { borderWidth: 1, padding: 12, borderRadius: 8, backgroundColor: '#fff', borderColor: '#ddd' },
+  topLabel: { fontSize: 18, marginBottom: 6, color: '#fff' },
+  titleInput: { borderWidth: 1, padding: 12, borderRadius: 8, backgroundColor: '#2c2c2c', borderColor: '#404040', color: '#fff' },
   aiButtonContainer: { alignItems: 'center', marginBottom: 20 },
   aiButton: { 
     backgroundColor: '#007AFF', 
@@ -793,12 +795,12 @@ const styles = StyleSheet.create({
   },
   aiButtonText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   globalToggleContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20 },
-  globalToggleLabel: { fontSize: 16, marginRight: 8, color: '#333' },
+  globalToggleLabel: { fontSize: 16, marginRight: 8, color: '#fff' },
   cardContainer: { 
     marginBottom: 20, 
     padding: 20, 
     borderRadius: 10, 
-    backgroundColor: '#fff', 
+    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
@@ -822,13 +824,13 @@ const styles = StyleSheet.create({
   addCardContainer: { alignItems: 'center', marginBottom: 20 },
   addCardButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center', shadowColor: "#000", shadowOpacity: 0.25, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   addCardText: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
-  roundDeleteButton: { alignSelf: 'center', width: '30%', borderRadius: 1, backgroundColor: 'red', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  roundDeleteButtonText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  roundDeleteButton: { alignSelf: 'center', width: '30%', borderRadius: 20, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center', marginTop: 10, padding: 8 },
+  roundDeleteButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   deckContainer: { marginBottom: 20 },
-  deckButton: { backgroundColor: '#eee', padding: 12, marginVertical: 6, borderRadius: 8, alignItems: 'center' },
-  deckButtonText: { fontSize: 16, color: '#333' },
-  savedCard: { borderWidth: 1, padding: 15, marginVertical: 10, borderRadius: 8, backgroundColor: '#fff', borderColor: '#ddd' },
-  wipeContainer: { marginVertical: 20, borderTopWidth: 1, borderTopColor: '#ccc', paddingTop: 20 },
+  deckButton: { backgroundColor: '#2c2c2c', padding: 12, marginVertical: 6, borderRadius: 8, alignItems: 'center' },
+  deckButtonText: { fontSize: 16, color: '#fff' },
+  savedCard: { borderWidth: 1, padding: 15, marginVertical: 10, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderColor: '#404040' },
+  wipeContainer: { marginVertical: 20, borderTopWidth: 1, borderTopColor: '#404040', paddingTop: 20 },
   customButton: { backgroundColor: '#007AFF', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 10, marginBottom: 12, alignItems: 'center', shadowColor: "#000", shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   customButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   autoImagesContainer: { marginVertical: 10, height: 90 },
@@ -838,7 +840,7 @@ const styles = StyleSheet.create({
   crossButtonText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
   modalOverlay: { 
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)', 
+    backgroundColor: 'rgba(0,0,0,0.7)', 
     justifyContent: 'center', 
     alignItems: 'center'
   },
@@ -846,7 +848,7 @@ const styles = StyleSheet.create({
   searchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   searchInput: { flex: 1, borderWidth: 1, padding: 10, marginRight: 10, borderRadius: 8, borderColor: '#ddd' },
   searchButton: { backgroundColor: '#007AFF', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
-  errorText: { color: 'red', textAlign: 'center', marginVertical: 10 },
+  errorText: { color: '#FF3B30', textAlign: 'center', marginVertical: 10 },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', marginTop: 10 },
   imageItem: { width: IMAGE_SIZE, height: IMAGE_SIZE, margin: 4, backgroundColor: '#f0f0f0', borderRadius: 8, overflow: 'hidden' },
   poweredByText: { marginTop: 10, textAlign: 'center', fontSize: 12, color: '#666' },
