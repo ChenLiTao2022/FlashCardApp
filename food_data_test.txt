@@ -1,0 +1,15 @@
+// Testing script to verify food data storage consolidation
+
+Steps to test:
+
+1. Open your app and navigate to the Shop screen
+2. Purchase some food items
+3. Navigate back to the CatSection screen
+4. Verify that the purchased food items are visible in the food inventory
+5. Feed the cat with the purchased food items
+6. Go back to the Shop and verify the quantities have been updated
+
+This should work now because:
+- Both screens use the consolidated food data storage (loadFoodData/saveFoodData)
+- Both screens refresh their data when they regain focus (useFocusEffect)
+- The food data is maintained in a single place in AsyncStorage

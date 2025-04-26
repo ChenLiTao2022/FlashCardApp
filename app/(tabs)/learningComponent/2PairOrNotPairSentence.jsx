@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated,
+  Easing
 } from 'react-native';
 
 export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
@@ -15,9 +17,13 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
   const [answerExample, setAnswerExample] = useState(null);
   const [selectedChoice, setSelectedChoice] = useState(null); // null, 'pair', 'notPair'
   const [answered, setAnswered] = useState(false);
+  const [isPair, setIsPair] = useState(false);
   
-  // Determine if the question and answer pair (50% chance)
-  const isPair = useMemo(() => Math.random() < 0.5, [questionExample, answerExample]);
+  // Animation values
+  const titleAnimation = useRef(new Animated.Value(0)).current;
+  const questionAnimation = useRef(new Animated.Value(0)).current;
+  const answerAnimation = useRef(new Animated.Value(0)).current;
+  const buttonsAnimation = useRef(new Animated.Value(0)).current;
 
   // Initialize and select a random card and examples
   useEffect(() => {
@@ -53,8 +59,12 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
         const question = examples[questionIndex];
         setQuestionExample(question);
         
+        // Determine if this should be a pair (50% chance)
+        const shouldBePair = Math.random() < 0.5;
+        setIsPair(shouldBePair);
+        
         // For the answer, either use the matching answer or a random different answer
-        if (isPair) {
+        if (shouldBePair) {
           // If pair, use the matching answer
           setAnswerExample(question);
         } else {
@@ -74,6 +84,49 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
     
     init();
   }, [dueCards]);
+  
+  // Animation sequence when component renders
+  useEffect(() => {
+    if (!loading && questionExample && answerExample) {
+      // Reset animation values
+      titleAnimation.setValue(0);
+      questionAnimation.setValue(0);
+      answerAnimation.setValue(0);
+      buttonsAnimation.setValue(0);
+      
+      // Run animations in sequence
+      Animated.sequence([
+        // Title first
+        Animated.timing(titleAnimation, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.7))
+        }),
+        // Question container
+        Animated.timing(questionAnimation, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic)
+        }),
+        // Answer container
+        Animated.timing(answerAnimation, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic)
+        }),
+        // Buttons
+        Animated.timing(buttonsAnimation, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic)
+        })
+      ]).start();
+    }
+  }, [loading, questionExample, answerExample]);
   
   // Reset component when showResult changes (new round)
   useEffect(() => {
@@ -128,10 +181,42 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Do These Sentences Match?</Text>
+      <Animated.Text 
+        style={[
+          styles.title,
+          {
+            opacity: titleAnimation,
+            transform: [
+              {
+                translateY: titleAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
+        Do These Sentences Match?
+      </Animated.Text>
       
       {/* Question Section */}
-      <View style={styles.sentenceContainer}>
+      <Animated.View 
+        style={[
+          styles.sentenceContainer,
+          {
+            opacity: questionAnimation,
+            transform: [
+              {
+                translateX: questionAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-100, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
         <Text style={styles.sentenceLabel}>Question:</Text>
         <Text style={styles.sentenceText}>{questionExample.question}</Text>
         {questionExample.questionPhonetic && (
@@ -140,10 +225,25 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
         {questionExample.questionTranslation && (
           <Text style={styles.translationText}>{questionExample.questionTranslation}</Text>
         )}
-      </View>
+      </Animated.View>
       
       {/* Answer Section */}
-      <View style={styles.sentenceContainer}>
+      <Animated.View 
+        style={[
+          styles.sentenceContainer,
+          {
+            opacity: answerAnimation,
+            transform: [
+              {
+                translateX: answerAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [100, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
         <Text style={styles.sentenceLabel}>Answer:</Text>
         <Text style={styles.sentenceText}>{answerExample.answer}</Text>
         {answerExample.answerPhonetic && (
@@ -152,10 +252,25 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
         {answerExample.translation && (
           <Text style={styles.translationText}>{answerExample.translation}</Text>
         )}
-      </View>
+      </Animated.View>
       
       {/* Choices */}
-      <View style={styles.choicesContainer}>
+      <Animated.View 
+        style={[
+          styles.choicesContainer,
+          {
+            opacity: buttonsAnimation,
+            transform: [
+              {
+                translateY: buttonsAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [50, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.choiceButton,
@@ -181,11 +296,26 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
         >
           <Text style={styles.choiceButtonText}>They Don't Match</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
       
       {/* Feedback Section */}
       {answered && (
-        <View style={styles.feedbackContainer}>
+        <Animated.View 
+          style={[
+            styles.feedbackContainer,
+            {
+              opacity: buttonsAnimation,
+              transform: [
+                {
+                  scale: buttonsAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
           <Text style={[
             styles.feedbackText,
             (selectedChoice === 'pair' && isPair) || (selectedChoice === 'notPair' && !isPair) 
@@ -199,7 +329,7 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
           <Text style={styles.answerText}>
             These sentences {isPair ? 'DO match' : 'DO NOT match'}.
           </Text>
-        </View>
+        </Animated.View>
       )}
     </View>
   );

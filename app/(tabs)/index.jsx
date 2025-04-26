@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,182 +6,33 @@ import {
   TouchableOpacity,
   Image,
   ImageBackground,
-  Dimensions,
   Pressable,
-  Animated,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as SQLite from 'expo-sqlite';
 import * as Font from 'expo-font';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CatSection, {
+  ChestSlot,
+  ChestAnimationScreen,
+  ChestUnlockConfirmation
+} from './CatSection';
+import BottomTabBar from '../components/BottomTabBar';
+import { 
+  loadMoney, 
+  saveMoney, 
+  loadDailyStreak, 
+  loadDiamonds,
+  savePlayerData
+} from '../helpers/StorageHelper';
 
 const db = SQLite.openDatabaseSync('mydb.db');
 
-const { width, height } = Dimensions.get('window');
-
-// ----------------------------
-// Dynamic Room Settings
-// ----------------------------
-const screenWidth = width;
-const ROOM_BG_SIZE = screenWidth * 0.9; // Room takes up 95% of the device's width
-const ROOM_ROWS = 32;
-const ROOM_COLS = 32;
-const ROOM_CELL_SIZE = ROOM_BG_SIZE / ROOM_ROWS;
-
-// ----------------------------
-// Animation Settings for Cat Sprite (Box2.png)
-// ----------------------------
-const frameWidth = 64 * 1.5;
-const frameHeight = 64 * 1.5;
-const frameCount = 10;
-const animationInterval = 150;
-
-// ----------------------------
-// Cat Size Option
-// ----------------------------
-const CAT_SIZE = 0.5;
-
-// ----------------------------
-// Other Constants & Helper Functions
-// ----------------------------
-const CELL_SIZE = 32;
-const SHEET_SIZE = 1024;
-const ROOM_SCALE = 0.6;
-
-function createSpriteFromGrid(startRow, startCol, rowSpan, colSpan) {
-  return {
-    x: startCol * CELL_SIZE,
-    y: startRow * CELL_SIZE,
-    width: colSpan * CELL_SIZE,
-    height: rowSpan * CELL_SIZE,
-  };
-}
-
-// ----------------------------
-// Decoration Library for Furniture Items
-// ----------------------------
-const decorationLibrary = {
-  testDeco: createSpriteFromGrid(0, 0, 3, 3),
-  catBed: createSpriteFromGrid(4, 6, 3, 4),
-  catTower: createSpriteFromGrid(7, 17, 5, 4),
-  catFood: createSpriteFromGrid(13, 8, 2, 2),
-  windowLeft: createSpriteFromGrid(9, 21, 5, 3),
-  catFlag: createSpriteFromGrid(6, 14, 2, 1),
-  plant: createSpriteFromGrid(9, 4, 4, 2),
-  leftSmallWindow: createSpriteFromGrid(7, 0, 2, 2),
-  shelf: createSpriteFromGrid(21, 0, 4, 4),
-  toy: createSpriteFromGrid(15, 21, 3, 2),
-};
-
-const spriteLibrary = {
-  catFood: createSpriteFromGrid(17, 18, 2, 2),
-};
-
-// ----------------------------
-// RoomDecorationItem Component (Tap-to-select)
-// ----------------------------
-function RoomDecorationItem({ id, itemKey, roomRow, roomCol, isSelected, onSelect, frameIndex }) {
-  if (itemKey === 'catSprite') {
-    return (
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={() => {
-          if (!isSelected && !onSelect(null)) onSelect(id);
-        }}
-        pointerEvents={isSelected ? 'none' : 'auto'}
-        style={{
-          position: 'absolute',
-          left: roomCol * ROOM_CELL_SIZE,
-          top: roomRow * ROOM_CELL_SIZE,
-          width: frameWidth * CAT_SIZE,
-          height: frameHeight * CAT_SIZE,
-          opacity: isSelected ? 0.5 : 1,
-          overflow: 'hidden',
-        }}
-      >
-        <Image
-          source={require('../asset/RetroCatsPaid/Cats/Sprites/Box2.png')}
-          style={{
-            position: 'absolute',
-            left: -frameIndex * frameWidth * CAT_SIZE,
-            top: 0,
-            width: frameWidth * frameCount * CAT_SIZE,
-            height: frameHeight * CAT_SIZE,
-            resizeMode: 'contain',
-          }}
-        />
-      </TouchableOpacity>
-    );
-  } else {
-    const { x, y, width, height } = decorationLibrary[itemKey];
-    return (
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={() => {
-          if (!isSelected) {
-            onSelect(id);
-          }
-        }}
-        pointerEvents={isSelected ? 'none' : 'auto'}
-        style={{
-          position: 'absolute',
-          left: roomCol * ROOM_CELL_SIZE,
-          top: roomRow * ROOM_CELL_SIZE,
-          width: width * ROOM_SCALE,
-          height: height * ROOM_SCALE,
-          opacity: isSelected ? 0.5 : 1,
-          overflow: 'hidden',
-        }}
-      >
-        <Image
-          source={require('../asset/RetroCatsPaid/CatItems/Decorations/CatRoomDecorations.png')}
-          style={{
-            position: 'absolute',
-            top: -y * ROOM_SCALE,
-            left: -x * ROOM_SCALE,
-            width: SHEET_SIZE * ROOM_SCALE,
-            height: SHEET_SIZE * ROOM_SCALE,
-            resizeMode: 'contain',
-          }}
-        />
-      </TouchableOpacity>
-    );
-  }
-}
-
-// ----------------------------
-// Cat Food Slot Components
-// ----------------------------
-function CatFoodSlotLeft() {
-  const { x, y, width: cellWidth } = spriteLibrary.catFood;
-  const CAT_FOOD_IMG_SCALE = 60 / cellWidth;
-  return (
-    <View style={[styles.catFoodContainer, { width: 70, height: 70 }]}>
-      <View style={{ width: 70, height: 70, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <Image
-          source={require('../asset/RetroCatsPaid/CatItems/Decorations/CatRoomDecorations.png')}
-          style={{
-            position: 'absolute',
-            top: -y * CAT_FOOD_IMG_SCALE,
-            left: -x * CAT_FOOD_IMG_SCALE,
-            width: SHEET_SIZE * CAT_FOOD_IMG_SCALE,
-            height: SHEET_SIZE * CAT_FOOD_IMG_SCALE,
-            resizeMode: 'contain',
-          }}
-        />
-      </View>
-      <Text style={styles.foodLabel} numberOfLines={1}>3 hours</Text>
-    </View>
-  );
-}
-
-function CatFoodSlot() {
-  return (
-    <View style={[styles.catFoodContainer, { width: 70, height: 70 }]}>
-      <Text style={styles.genericFoodText} numberOfLines={1}>Cat Food</Text>
-    </View>
-  );
-}
+// for Chests.png, in total 4 chests, each one two rows, 5 frames per row 
+// width = 240 / 5 = 48 
+// height = 256 /8 = 32
 
 // ----------------------------
 // Main IndexPage Component
@@ -189,6 +40,28 @@ function CatFoodSlot() {
 export default function IndexPage({ navigation }) {
   const [fontLoaded, setFontLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFurnitureMode, setIsFurnitureMode] = useState(false);
+  
+  // Add state for tracking whether we're in home mode (showing review/chests) or deco/feed mode
+  const [isHomeMode, setIsHomeMode] = useState(true);
+  
+  // Add state for player data
+  const [money, setMoney] = useState(10000);
+  const [diamonds, setDiamonds] = useState(100);
+  const [dailyStreak, setDailyStreak] = useState(0);
+  
+  // Add state for chest animation and unlock confirmation
+  const [showChestAnimation, setShowChestAnimation] = useState(false);
+  const [showUnlockConfirmation, setShowUnlockConfirmation] = useState(false);
+  const [selectedChestIndex, setSelectedChestIndex] = useState(0);
+  
+  // Add state to track chest timers and availability
+  const [chestTimers, setChestTimers] = useState([
+    { total: 3, remaining: null, chestType: 0, unlockable: true },    // First chest: 3 seconds (unlockable)
+    { total: 120, remaining: null, chestType: 1, unlockable: true },   // Second chest: 10 seconds (unlockable)
+    { total: 1800, remaining: null, chestType: 2, unlockable: true },   // Third chest: 15 seconds (unlockable)
+    { total: 4800, remaining: null, chestType: 3, unlockable: true }   // Fourth chest: 2 minutes (unlockable)
+  ]);
 
   // Add this useEffect for font loading and initial loading screen
   useEffect(() => {
@@ -201,103 +74,318 @@ export default function IndexPage({ navigation }) {
     
     loadFont();
     
+    // Load player data from AsyncStorage
+    const loadPlayerData = async () => {
+      try {
+        // Load money, diamonds, and daily streak from consolidated storage
+        const [moneyValue, diamondsValue, streakValue] = await Promise.all([
+          loadMoney(),
+          loadDiamonds(),
+          loadDailyStreak()
+        ]);
+        
+        setMoney(moneyValue);
+        setDiamonds(diamondsValue);
+        setDailyStreak(streakValue);
+      } catch (error) {
+        console.error('Error loading player data:', error);
+      }
+    };
+    
+    loadPlayerData();
+    
     // Display loading screen for 2 seconds
     const timer = setTimeout(() => {
-      
+      setIsLoading(false);
     }, 2000);
     
     return () => clearTimeout(timer);
   }, []);
 
-  const [stats] = useState({
-    hunger: 80,
-    clean: 75,
-    bored: 60,
-    love: 90,
-  });
+  // Add a useEffect for countdown timers
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
+      setChestTimers(prevTimers => {
+        const newTimers = [...prevTimers];
+        let hasUpdates = false;
+        
+        for (let i = 0; i < newTimers.length; i++) {
+          if (newTimers[i].remaining > 0) {
+            newTimers[i].remaining -= 1;
+            hasUpdates = true;
+          }
+        }
+        
+        return hasUpdates ? newTimers : prevTimers;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timerInterval);
+  }, []);
 
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [showPanel, setShowPanel] = useState(false);
+  // Add a useEffect to load chest timers from AsyncStorage on component mount
+  useEffect(() => {
+    const loadChestTimers = async () => {
+      try {
+        const savedTimersString = await AsyncStorage.getItem('chestTimers');
+        if (savedTimersString) {
+          const savedTimers = JSON.parse(savedTimersString);
+          
+          // Calculate remaining time for each active timer
+          const updatedTimers = [...chestTimers].map((timer, index) => {
+            if (savedTimers[index] && savedTimers[index].startTime) {
+              const startTime = savedTimers[index].startTime;
+              const totalTime = savedTimers[index].total;
+              const chestType = savedTimers[index].chestType;
+              const unlockable = savedTimers[index].unlockable;
+              
+              // Calculate elapsed time in seconds
+              const now = Date.now();
+              const elapsedSeconds = Math.floor((now - startTime) / 1000);
+              
+              // Calculate remaining time
+              const remaining = Math.max(0, totalTime - elapsedSeconds);
+              
+              // If timer has completed, set remaining to 0
+              if (remaining === 0) {
+                return {
+                  ...timer,
+                  remaining: 0,
+                  total: totalTime,
+                  chestType: chestType,
+                  unlockable: unlockable
+                };
+              } else {
+                return {
+                  ...timer,
+                  remaining: remaining,
+                  total: totalTime,
+                  chestType: chestType,
+                  unlockable: unlockable
+                };
+              }
+            }
+            return timer;
+          });
+          
+          setChestTimers(updatedTimers);
+        }
+      } catch (error) {
+        console.error("Error loading chest timers:", error);
+      }
+    };
+    
+    loadChestTimers();
+  }, []);
+  
+  // Save chest timers to AsyncStorage whenever they change
+  useEffect(() => {
+    const saveChestTimers = async () => {
+      try {
+        // Create a saveable version of the timers that includes startTime
+        const timersToSave = chestTimers.map(timer => {
+          // Only include startTime for timers that are running
+          if (timer.remaining !== null && timer.remaining > 0) {
+            // Calculate the startTime based on remaining time
+            const now = Date.now();
+            const startTime = now - ((timer.total - timer.remaining) * 1000);
+            
+            return {
+              ...timer,
+              startTime
+            };
+          } else if (timer.remaining === 0) {
+            // For completed timers
+            return {
+              ...timer,
+              startTime: Date.now() - (timer.total * 1000) // Timer is done
+            };
+          }
+          
+          // For unlockable or null timers
+          return {
+            ...timer,
+            startTime: null
+          };
+        });
+        
+        await AsyncStorage.setItem('chestTimers', JSON.stringify(timersToSave));
+      } catch (error) {
+        console.error("Error saving chest timers:", error);
+      }
+    };
+    
+    saveChestTimers();
+  }, [chestTimers]);
 
-  // currentRoomIndex: 0 for current room, 1 for locked room.
-  const [currentRoomIndex, setCurrentRoomIndex] = useState(0);
-  const translateX = useRef(new Animated.Value(0)).current;
+  // Save money to player data in AsyncStorage whenever it changes
+  useEffect(() => {
+    const updateMoney = async () => {
+      try {
+        await saveMoney(money);
+      } catch (error) {
+        console.error('Error saving money:', error);
+      }
+    };
+    
+    updateMoney();
+  }, [money]);
 
-  const [decorations, setDecorations] = useState([
-    { id: '1', itemKey: 'testDeco', roomRow: 7, roomCol: 20 },
-    { id: '2', itemKey: 'catBed', roomRow: 11, roomCol: 13 },
-    { id: '3', itemKey: 'catTower', roomRow: 12, roomCol: 22 },
-    { id: '4', itemKey: 'catFood', roomRow: 19, roomCol: 20 },
-    { id: '5', itemKey: 'windowLeft', roomRow: 7, roomCol: 5 },
-    { id: '6', itemKey: 'catFlag', roomRow: 7, roomCol: 19 },
-    { id: '7', itemKey: 'plant', roomRow: 10, roomCol: 19 },
-    { id: '8', itemKey: 'plant', roomRow: 12, roomCol: 8 },
-    { id: '9', itemKey: 'leftSmallWindow', roomRow: 6, roomCol: 12 },
-    { id: '10', itemKey: 'shelf', roomRow: 15, roomCol: 2 },
-    { id: '11', itemKey: 'toy', roomRow: 21, roomCol: 12 },
-    { id: 'cat', itemKey: 'catSprite', roomRow: Math.floor(ROOM_ROWS / 2), roomCol: Math.floor(ROOM_COLS / 2) },
-  ]);
+  // Handler for chest clicks
+  const handleChestClick = (chestIndex, chestState) => {
+    if (chestState === 'ready') {
+      // Chest is ready to open (timer reached 0)
+      setSelectedChestIndex(chestIndex);
+      setShowChestAnimation(true);
+    } else if (chestState === 'unlockable') {
+      // Chest is unlockable, show confirmation
+      setSelectedChestIndex(chestIndex);
+      setShowUnlockConfirmation(true);
+    } else {
+      // Chest is locked (timer running)
+      console.log(`Chest ${chestIndex} not ready yet. ${chestTimers[chestIndex].remaining}s remaining.`);
+    }
+  };
+  
+  // Modify handleUnlockConfirm to use Date.now() as startTime
+  const handleUnlockConfirm = (chestIndex) => {
+    // Check how many chests are currently unlocked (timer running or ready to open)
+    const activeChests = chestTimers.filter(timer => 
+      (timer.remaining !== null && !timer.unlockable) || timer.remaining === 0
+    ).length;
+    
+    // Only allow unlocking if there are fewer than 2 active chests
+    if (activeChests < 2) {
+      // Start the timer for the chest
+      setChestTimers(prevTimers => {
+        const newTimers = [...prevTimers];
+        newTimers[chestIndex] = {
+          ...newTimers[chestIndex],
+          remaining: newTimers[chestIndex].total,
+          unlockable: false,
+          startTime: Date.now() // Add the start time
+        };
+        return newTimers;
+      });
+    } else {
+      // Show alert that maximum number of chests are already unlocked
+      Alert.alert(
+        "Maximum Chests Unlocked",
+        "You can only have 2 chests unlocked at a time. Wait for a chest to be ready or open a ready chest.",
+        [{ text: "OK" }]
+      );
+    }
+    
+    // Hide the confirmation dialog
+    setShowUnlockConfirmation(false);
+  };
+  
+  // Handle canceling chest unlock
+  const handleUnlockCancel = () => {
+    setShowUnlockConfirmation(false);
+  };
+  
+  // Format time display for chest countdown
+  const formatChestTime = (seconds) => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      if (remainingSeconds === 0) {
+        return `${minutes}m`;
+      } else {
+        return `${minutes}m ${remainingSeconds}s`;
+      }
+    }
+  };
+  
+  // Handler for when chest animation completes
+  const handleChestAnimationComplete = async (rewards, chestIndex, shouldEmpty) => {
+    // Clean up the chest animation state
+    if (shouldEmpty) {
+      setShowChestAnimation(false);
+      setChestTimers(prevTimers => {
+        const newTimers = [...prevTimers];
+        newTimers[chestIndex] = {
+          ...newTimers[chestIndex],
+          remaining: null,
+          unlockable: false
+        };
+        return newTimers;
+      });
+    } else {
+      setShowChestAnimation(false);
+      setChestTimers(prevTimers => {
+        const newTimers = [...prevTimers];
+        newTimers[chestIndex] = {
+          ...newTimers[chestIndex],
+          remaining: null,
+          unlockable: true
+        };
+        return newTimers;
+      });
+    }
 
-  const [selectedDecorationId, setSelectedDecorationId] = useState(null);
-  const [frameIndex, setFrameIndex] = useState(0);
-  const router = useRouter();
+    if (rewards) {
+      // Add food rewards to AsyncStorage
+      const foodRewards = rewards.food || [];
+      
+      if (foodRewards.length > 0) {
+        try {
+          const pendingFoodRewardsStr = await AsyncStorage.getItem('pendingFoodRewards');
+          let pendingFoodRewards = [];
+          
+          if (pendingFoodRewardsStr) {
+            pendingFoodRewards = JSON.parse(pendingFoodRewardsStr);
+          }
+          
+          // Add new food rewards to pending list
+          pendingFoodRewards = [...pendingFoodRewards, ...foodRewards];
+          await AsyncStorage.setItem('pendingFoodRewards', JSON.stringify(pendingFoodRewards));
+        } catch (error) {
+          console.error('Error updating pending food rewards:', error);
+        }
+      }
+      
+      // Update money in state and consolidated storage
+      if (rewards.gold) {
+        try {
+          // Add the gold reward
+          const updatedMoney = money + rewards.gold;
+          
+          // Update the state so UI reflects change immediately
+          setMoney(updatedMoney);
+          
+          // Save the updated amount
+          await saveMoney(updatedMoney);
+        } catch (error) {
+          console.error('Error updating money:', error);
+        }
+      }
+    }
+  };
 
   // New state variables for study mode and deck selection.
   const [isStudyMode, setIsStudyMode] = useState(false);
   const [decks, setDecks] = useState([]);
   const [selectedDeck, setSelectedDeck] = useState(null);
 
-  // Cat sprite animation effect.
-  useEffect(() => {
-    const timer = setInterval(() => setFrameIndex(prev => (prev + 1) % frameCount), animationInterval);
-    return () => clearInterval(timer);
-  }, []);
-
-  const handleSelectDecoration = (id) => {
-    if (selectedDecorationId === null) {
-      setSelectedDecorationId(id);
-    }
-  };
-
-  const handleRoomAreaPress = (event) => {
-    if (currentRoomIndex !== 0) return;
-    if (!showPanel) {
-      setShowPanel(true);
-      return;
-    }
-    if (!selectedDecorationId) return;
-    const { locationX, locationY } = event.nativeEvent;
-    const selectedDecoration = decorations.find(d => d.id === selectedDecorationId);
-    let decoWidth, decoHeight;
-    if (selectedDecoration.itemKey === 'catSprite') {
-      decoWidth = frameWidth * CAT_SIZE;
-      decoHeight = frameHeight * CAT_SIZE;
-    } else {
-      const deco = decorationLibrary[selectedDecoration.itemKey];
-      decoWidth = deco.width * ROOM_SCALE;
-      decoHeight = deco.height * ROOM_SCALE;
-    }
-    const newLeft = locationX - (decoWidth / 2);
-    const newTop = locationY - (decoHeight / 2);
-    const newCol = Math.round(newLeft / ROOM_CELL_SIZE);
-    const newRow = Math.round(newTop / ROOM_CELL_SIZE);
-    setDecorations(
-      decorations.map((decoration) =>
-        decoration.id === selectedDecorationId
-          ? { ...decoration, roomRow: newRow, roomCol: newCol }
-          : decoration
-      )
-    );
-    setSelectedDecorationId(null);
-  };
+  const router = useRouter();
 
   // Updated handleStudy function:
   // If in study mode and a deck is selected, pass the deckName to the Review screen.
-  const handleStudy = () => {
+  const handleStudy = async () => {
     if (isStudyMode && selectedDeck) {
+      // Count how many chest slots are occupied (not null and not 0)
+      const occupiedChests = chestTimers.filter(timer => timer.remaining !== null).length;
+      
+      // Store the current state of chest slots
+      await AsyncStorage.setItem('occupiedChestsCount', occupiedChests.toString());
+      
       router.push({
         pathname: '/Review',
-        params: { deckName: selectedDeck.name },
+        params: { deckName: selectedDeck.name }
       });
     } else {
       try {
@@ -313,38 +401,70 @@ export default function IndexPage({ navigation }) {
     }
   };
 
-  // Arrow Navigation for switching rooms.
-  const handleArrowPress = (direction) => {
-    if (direction === 'right' && currentRoomIndex === 0) {
-      Animated.timing(translateX, {
-        toValue: -ROOM_BG_SIZE,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => setCurrentRoomIndex(1));
-    } else if (direction === 'left' && currentRoomIndex === 1) {
-      Animated.timing(translateX, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => setCurrentRoomIndex(0));
+  // Handle furniture mode changes from CatSection
+  const handleFurnitureModeChange = (isActive) => {
+    setIsFurnitureMode(isActive);
+    
+    // When furniture mode is active, we're not in home mode
+    if (isActive) {
+      setIsHomeMode(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'black' }}>
-        <Pressable 
-          onPress={() => setIsLoading(false)}
-          style={{ width: '100%', height: '100%' }}
-        >
-          <Image 
-            source={require('../asset/front.webp')} 
-            style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
-          />
-        </Pressable>
-      </View>
-    );
-  }
+  // Add handler for mode changes from CatSection
+  const handleModeChange = (isHome) => {
+    setIsHomeMode(isHome);
+  };
+
+  // Handle adding a new chest when returning from review
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkForNewChest = async () => {
+        try {
+          // Check if there's a flag for a new chest in AsyncStorage
+          const newChestFlag = await AsyncStorage.getItem('addNewChest');
+          
+          if (newChestFlag === 'true') {
+            // Get the chest index that was awarded
+            const chestIndexStr = await AsyncStorage.getItem('newChestIndex');
+            const chestIndex = parseInt(chestIndexStr || '0');
+            
+            // Find the first empty chest slot
+            const emptySlotIndex = chestTimers.findIndex(timer => timer.remaining === null && !timer.unlockable);
+            
+            if (emptySlotIndex !== -1) {
+              // Map chest types to their correct durations
+              const chestDurations = [3, 120, 1800, 4800]; // 3s, 10s, 15s, 2min based on original setup
+              
+              // Add the new chest to this slot but make it unlockable
+              setChestTimers(prevTimers => {
+                const newTimers = [...prevTimers];
+                newTimers[emptySlotIndex] = {
+                  total: chestDurations[chestIndex], // Use the correct duration based on chest type
+                  remaining: null, // Not started yet
+                  chestType: chestIndex, // Store which type of chest this is
+                  unlockable: true // Make it unlockable
+                };
+                return newTimers;
+              });
+            }
+            
+            // Clear the flags
+            await AsyncStorage.removeItem('addNewChest');
+            await AsyncStorage.removeItem('newChestIndex');
+          }
+        } catch (error) {
+          console.error("Error checking for new chest:", error);
+        }
+      };
+      
+      checkForNewChest();
+      
+      return () => {};
+    }, [chestTimers])
+  );
+
+
 
   if (!fontLoaded) {
     return (
@@ -357,76 +477,41 @@ export default function IndexPage({ navigation }) {
   return (
     <ImageBackground source={require('../asset/background.png')} style={styles.bgImage}>
       <View style={styles.container}>
-        {/* --- Status Bar --- */}
-        <View style={styles.statusContainer}>
-          {isStudyMode ? (
-            <Text style={styles.selectDeckText}>Select A Deck</Text>
-          ) : (
-            Object.entries(stats).map(([key, value]) => (
-              <View key={key} style={styles.statusBar}>
-                <Text style={styles.statusLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
-                <View style={styles.barBackground}>
-                  <View style={[styles.barFill, { width: `${value}%`, backgroundColor: STATS_COLORS[key] }]} />
-                </View>
-                <Text style={styles.percentageText}>{value}%</Text>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* --- Deck Selection / Action Buttons --- */}
+        {/* Display study mode UI or CatSection */}
         {isStudyMode ? (
-          <ScrollView 
-            horizontal 
-            style={styles.deckListContainer}
-            contentContainerStyle={styles.deckListContent}
-          >
-            {decks.map((deck, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.deckButton,
-                  selectedDeck?.name === deck.name && styles.selectedDeckButton
-                ]}
-                onPress={() => {
-                  const items = db.getAllSync(`SELECT * FROM ${deck.name}`);
-                  const now = new Date();
-                  const due = items.filter(card => now >= new Date(card.nextReviewDate));
-                  setSelectedDeck({
-                    name: deck.name,
-                    totalCards: items.length,
-                    dueCount: due.length,
-                  });
-                }}
-              >
-                <Text style={styles.deckButtonText}>{deck.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.actionButton} onPress={() => setIsEditMode(!isEditMode)}>
-              <Text style={styles.actionButtonIcon}>✏️</Text>
-              <Text style={styles.actionButtonText}>{isEditMode ? 'Done' : 'Edit'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonIcon}>🍗</Text>
-              <Text style={styles.actionButtonText}>Feed</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonIcon}>🧹</Text>
-              <Text style={styles.actionButtonText}>Clean</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonIcon}>🎮</Text>
-              <Text style={styles.actionButtonText}>Play</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* --- Room Area --- */}
-        <View style={styles.roomAreaWrapper}>
-          {isStudyMode ? (
+          <View style={styles.studyModeContainer}>
+            <View style={styles.statusContainer}>
+              <Text style={styles.selectDeckText}>Select A Deck</Text>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              style={styles.deckListContainer}
+              contentContainerStyle={styles.deckListContent}
+            >
+              {decks.map((deck, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.deckButton,
+                    selectedDeck?.name === deck.name && styles.selectedDeckButton
+                  ]}
+                  onPress={() => {
+                    const items = db.getAllSync(`SELECT * FROM ${deck.name}`);
+                    const now = new Date();
+                    const due = items.filter(card => now >= new Date(card.nextReviewDate));
+                    setSelectedDeck({
+                      name: deck.name,
+                      totalCards: items.length,
+                      dueCount: due.length,
+                    });
+                  }}
+                >
+                  <Text style={styles.deckButtonText}>{deck.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
             <View style={styles.deckInfoContainer}>
               {selectedDeck ? (
                 <>
@@ -438,123 +523,105 @@ export default function IndexPage({ navigation }) {
                 <Text style={styles.selectDeckPrompt}>Select a deck to begin</Text>
               )}
             </View>
-          ) : (
-            <>
-              <Animated.View style={[styles.animatedRoomContainer, { transform: [{ translateX }] }]}>
-                <Pressable style={styles.roomArea} onPress={handleRoomAreaPress}>
-                  <Image
-                    source={require('../asset/RetroCatsPaid/Catroom/Rooms/Room1.png')}
-                    style={styles.roomImage}
-                    resizeMode="contain"
-                  />
-                  {decorations.map((decoration) => (
-                    <RoomDecorationItem
-                      key={decoration.id}
-                      id={decoration.id}
-                      itemKey={decoration.itemKey}
-                      roomRow={decoration.roomRow}
-                      roomCol={decoration.roomCol}
-                      isSelected={decoration.id === selectedDecorationId}
-                      onSelect={handleSelectDecoration}
-                      frameIndex={frameIndex}
-                    />
-                  ))}
-                </Pressable>
-                <Pressable style={styles.roomArea} pointerEvents="none">
-                  <Image
-                    source={require('../asset/RetroCatsPaid/Catroom/Rooms/Room1.png')}
-                    style={styles.roomImage}
-                    resizeMode="contain"
-                  />
-                  <View style={styles.lockOverlay}>
-                    <Text style={styles.lockText}>Locked</Text>
-                  </View>
-                </Pressable>
-              </Animated.View>
-              {currentRoomIndex === 1 && (
-                <TouchableOpacity style={styles.leftArrow} onPress={() => handleArrowPress('left')}>
-                  <Text style={styles.arrowText}>←</Text>
-                </TouchableOpacity>
-              )}
-              {currentRoomIndex === 0 && (
-                <TouchableOpacity style={styles.rightArrow} onPress={() => handleArrowPress('right')}>
-                  <Text style={styles.arrowText}>→</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
+          </View>
+        ) : (
+          <CatSection 
+            onFurnitureModeChange={handleFurnitureModeChange} 
+            onModeChange={handleModeChange}
+            money={money}
+            setMoney={setMoney}
+            diamonds={diamonds}
+            dailyStreak={dailyStreak}
+          />
+        )}
 
         {/* --- Study Navigation Buttons --- */}
-        <View style={styles.studyNavContainer}>
-          <TouchableOpacity 
-            style={[
-              styles.studyButton, 
-              isStudyMode && { backgroundColor: '#4CAF50' }
-            ]} 
-            onPress={handleStudy}
-          >
-            <Text style={styles.studyButtonText}>
-              {isStudyMode ? 'START' : 'ADVENTURE'}
-            </Text>
-          </TouchableOpacity>
-          {isStudyMode && (
-            <TouchableOpacity style={styles.backButton} onPress={() => {
-              setIsStudyMode(false);
-              setSelectedDeck(null);
-              setDecks([]);
-            }}>
-              <Text style={styles.backButtonText}>BACK</Text>
+        {(isHomeMode && !isFurnitureMode) || isStudyMode ? (
+          <View style={styles.studyNavContainer}>
+            <TouchableOpacity 
+              style={[
+                styles.studyButton, 
+                isStudyMode && { backgroundColor: '#4CAF50' }
+              ]} 
+              onPress={handleStudy}
+            >
+              <Text style={styles.studyButtonText}>
+                {isStudyMode ? 'START' : 'Review Flashcards'}
+              </Text>
             </TouchableOpacity>
-          )}
-        </View>
+            {isStudyMode && (
+              <TouchableOpacity style={styles.backButton} onPress={() => {
+                setIsStudyMode(false);
+                setSelectedDeck(null);
+                setDecks([]);
+              }}>
+                <Text style={styles.backButtonText}>BACK</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : null}
 
-        {/* --- Cat Food Boxes Row --- */}
-        <View style={styles.catFoodRow}>
-          <CatFoodSlotLeft />
-          <CatFoodSlot />
-          <CatFoodSlot />
-          <CatFoodSlot />
-        </View>
+        {/* --- Chest Slots Row --- */}
+        {(isHomeMode && !isFurnitureMode) ? (
+          <View style={styles.chestSlotRow}>
+            <ChestSlot 
+              chestIndex={0} 
+              onChestClick={handleChestClick} 
+              timeRemaining={chestTimers[0].remaining}
+              chestType={chestTimers[0].chestType || 0}
+              unlockable={chestTimers[0].unlockable}
+            />
+            <ChestSlot 
+              chestIndex={1} 
+              onChestClick={handleChestClick} 
+              timeRemaining={chestTimers[1].remaining}
+              chestType={chestTimers[1].chestType || 1}
+              unlockable={chestTimers[1].unlockable}
+            />
+            <ChestSlot 
+              chestIndex={2} 
+              onChestClick={handleChestClick} 
+              timeRemaining={chestTimers[2].remaining}
+              chestType={chestTimers[2].chestType || 2}
+              unlockable={chestTimers[2].unlockable}
+            />
+            <ChestSlot 
+              chestIndex={3} 
+              onChestClick={handleChestClick} 
+              timeRemaining={chestTimers[3].remaining}
+              chestType={chestTimers[3].chestType || 3}
+              unlockable={chestTimers[3].unlockable}
+            />
+          </View>
+        ) : null}
 
         {/* --- Bottom Navigation --- */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity onPress={() => router.push('/PetShop')} style={styles.navItem}>
-            <View style={styles.navIconContainer}>
-              <Text style={styles.navIcon}>🛒</Text>
-            </View>
-            <Text style={styles.navLabel}>Shop</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/Decks')} style={styles.navItem}>
-            <View style={styles.navIconContainer}>
-              <Text style={styles.navIcon}>📦</Text>
-            </View>
-            <Text style={styles.navLabel}>Deck</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <View style={styles.navIconContainer}>
-              <Text style={styles.navIcon}>🐾</Text>
-            </View>
-            <Text style={styles.navLabel}>Current</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <View style={styles.navIconContainer}>
-              <Text style={styles.navIcon}>⚙️</Text>
-            </View>
-            <Text style={styles.navLabel}>More</Text>
-          </TouchableOpacity>
-        </View>
+        {(isHomeMode && !isFurnitureMode) ? (
+          <BottomTabBar />
+        ) : null}
+        
+        {/* Chest Animation Screen */}
+        {showChestAnimation && (
+          <ChestAnimationScreen 
+            chestIndex={selectedChestIndex}
+            onComplete={(rewards, chestIndex, shouldEmpty) => 
+              handleChestAnimationComplete(rewards, chestIndex, shouldEmpty)}
+          />
+        )}
+
+        {/* Chest Unlock Confirmation Dialog */}
+        {showUnlockConfirmation && (
+          <ChestUnlockConfirmation 
+            chestIndex={selectedChestIndex}
+            chestType={chestTimers[selectedChestIndex].chestType}
+            onConfirm={handleUnlockConfirm}
+            onCancel={handleUnlockCancel}
+          />
+        )}
       </View>
     </ImageBackground>
   );
 }
-
-const STATS_COLORS = {
-  hunger: '#FFA600',
-  clean: '#66C7F4',
-  bored: '#FF5252',
-  love: '#FF69B4',
-};
 
 const styles = StyleSheet.create({
   bgImage: { flex: 1 },
@@ -564,120 +631,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     padding: 10,
-    marginTop: 30,
+    marginTop: 45, // Increased to avoid overlapping with phone's status bar
     backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  statusBar: {
-    width: '48%',
-    marginVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusLabel: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  barBackground: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#333',
-    borderRadius: 4,
-    marginHorizontal: 5,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  percentageText: {
-    color: 'white',
-    fontSize: 12,
-  },
-  // Arrow styles
-  leftArrow: {
-    position: 'absolute',
-    left: 10,
-    top: '50%',
-    zIndex: 1000,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 20,
-    padding: 10,
-    transform: [{ translateY: -20 }],
-  },
-  rightArrow: {
-    position: 'absolute',
-    right: 10,
-    top: '50%',
-    zIndex: 1000,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 20,
-    padding: 10,
-    transform: [{ translateY: -20 }],
-  },
-  arrowText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  // Action buttons (non-study mode)
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    paddingHorizontal: 10,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingVertical: 10,
-    borderRadius: 15,
-    alignItems: 'center',
-    marginHorizontal: 4,
-    elevation: 3,
-    minWidth: 70,
-  },
-  actionButtonIcon: {
-    fontSize: 18,
-    marginVertical: 2,
-  },
-  actionButtonText: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  roomAreaWrapper: {
-    alignSelf: 'center',
-    marginVertical: 20,
-    width: ROOM_BG_SIZE,
-    height: ROOM_BG_SIZE,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  animatedRoomContainer: {
-    flexDirection: 'row',
-    width: ROOM_BG_SIZE * 2,
-    height: ROOM_BG_SIZE,
-  },
-  roomArea: {
-    width: ROOM_BG_SIZE,
-    height: ROOM_BG_SIZE,
-    position: 'relative',
-  },
-  roomImage: { width: '100%', height: '100%' },
-  lockOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lockText: {
-    color: 'white',
-    fontSize: 32,
-    fontWeight: 'bold',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
   // Study Navigation container for GO/STUDY and BACK buttons.
   studyNavContainer: {
@@ -725,37 +680,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
-  catFoodRow: {
+  chestSlotRow: {
     position: 'absolute',
-    bottom: '11%',
+    bottom: '12%',
     flexDirection: 'row',
     justifyContent: 'center',
     width: '100%',
     paddingHorizontal: 20,
-  },
-  catFoodContainer: {
-    borderRadius: 15,
-    padding: 5,
-    alignItems: 'center',
-    marginHorizontal: 5,
-    backgroundColor: '#FFD700',
-  },
-  genericFoodText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  foodLabel: {
-    position: 'absolute',
-    bottom: -20,
-    left: '50%',
-    transform: [{ translateX: -25 }],
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-    backgroundColor: '#0008',
-    paddingHorizontal: 5,
-    borderRadius: 4,
   },
   // Navigation at bottom of the screen.
   bottomNav: {
@@ -796,7 +727,8 @@ const styles = StyleSheet.create({
   deckListContainer: {
     maxHeight: 60,
     marginHorizontal: 10,
-    marginTop: 10,
+    marginTop: 20,
+    marginBottom: 10,
   },
   deckListContent: {
     paddingHorizontal: 10,
@@ -816,27 +748,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   deckInfoContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 15,
-    padding: 20,
+    padding: 12,
+    marginHorizontal: 20,
+    marginVertical: 15,
+    minHeight: 80,
+    maxHeight: 120,
   },
   deckInfoTitle: {
     color: 'white',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 5,
   },
   deckInfoText: {
     color: 'white',
-    fontSize: 18,
-    marginVertical: 5,
+    fontSize: 16,
+    marginVertical: 3,
   },
   selectDeckPrompt: {
     color: 'white',
     fontSize: 18,
     fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  studyModeContainer: {
+    flex: 1,
+    paddingBottom: 180, // Add space for the buttons at the bottom
   },
 });

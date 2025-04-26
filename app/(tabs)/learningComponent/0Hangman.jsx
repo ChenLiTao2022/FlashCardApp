@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions
+  Dimensions,
+  Animated,
+  Easing
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -18,6 +20,17 @@ export default function Hangman({ dueCards, onAnswer, showResult }) {
   const [wrongAttempts, setWrongAttempts] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
+  
+  // Animation values
+  const hintAnimation = useRef(new Animated.Value(0)).current;
+  const hangmanAnimation = useRef(new Animated.Value(0)).current;
+  const wordAnimation = useRef(new Animated.Value(0)).current;
+  const keyboardRowAnimations = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0)
+  ]).current;
   
   // Parse card data helper
   const parseCardData = (card) => {
@@ -45,6 +58,56 @@ export default function Hangman({ dueCards, onAnswer, showResult }) {
     setGameOver(false);
     setWon(false);
   }, [dueCards]);
+  
+  // Start animations when game is initialized
+  useEffect(() => {
+    if (targetCard) {
+      // Reset all animations
+      hintAnimation.setValue(0);
+      hangmanAnimation.setValue(0);
+      wordAnimation.setValue(0);
+      keyboardRowAnimations.forEach(anim => anim.setValue(0));
+      
+      // Run animations in sequence
+      Animated.sequence([
+        // Hint animation
+        Animated.timing(hintAnimation, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.5))
+        }),
+        
+        // Hangman animation
+        Animated.timing(hangmanAnimation, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic)
+        }),
+        
+        // Word container animation
+        Animated.timing(wordAnimation, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic)
+        }),
+        
+        // Keyboard rows animation (staggered)
+        Animated.stagger(150, 
+          keyboardRowAnimations.map(anim => 
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+              easing: Easing.out(Easing.cubic)
+            })
+          )
+        )
+      ]).start();
+    }
+  }, [targetCard]);
 
   // Check if the meaning has been guessed or if player lost
   useEffect(() => {
@@ -113,19 +176,48 @@ export default function Hangman({ dueCards, onAnswer, showResult }) {
   // Render the hangman figure based on wrong attempts
   const renderHangman = () => {
     return (
-      <View style={styles.hangmanContainer}>
+      <Animated.View 
+        style={[
+          styles.hangmanContainer,
+          {
+            opacity: hangmanAnimation,
+            transform: [
+              {
+                translateY: hangmanAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
         <View style={styles.hangmanStateContainer}>
           {Array(MAX_ATTEMPTS).fill(0).map((_, index) => (
-            <View 
+            <Animated.View 
               key={index} 
               style={[
                 styles.hangmanStateIndicator, 
-                index < wrongAttempts ? styles.hangmanStateUsed : styles.hangmanStateAvailable
+                index < wrongAttempts ? styles.hangmanStateUsed : styles.hangmanStateAvailable,
+                {
+                  opacity: hangmanAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 1]
+                  }),
+                  transform: [
+                    {
+                      scale: hangmanAnimation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.5, 1]
+                      })
+                    }
+                  ]
+                }
               ]} 
             />
           ))}
         </View>
-      </View>
+      </Animated.View>
     );
   };
 
@@ -135,7 +227,22 @@ export default function Hangman({ dueCards, onAnswer, showResult }) {
     
     const meaning = targetCard.back;
     return (
-      <View style={styles.wordContainer}>
+      <Animated.View 
+        style={[
+          styles.wordContainer,
+          {
+            opacity: wordAnimation,
+            transform: [
+              {
+                translateY: wordAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
         {[...meaning].map((letter, index) => {
           const isSpecialChar = letter === ' ' || letter === '-';
           const isGuessed = guessedLetters.includes(letter.toLowerCase());
@@ -153,7 +260,7 @@ export default function Hangman({ dueCards, onAnswer, showResult }) {
             </View>
           );
         })}
-      </View>
+      </Animated.View>
     );
   };
 
@@ -195,31 +302,109 @@ export default function Hangman({ dueCards, onAnswer, showResult }) {
   return (
     <View style={styles.container}>
       <View style={styles.gameContent}>
-        <View style={styles.hintContainer}>
+        <Animated.View 
+          style={[
+            styles.hintContainer,
+            {
+              opacity: hintAnimation,
+              transform: [
+                {
+                  translateY: hintAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-30, 0]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
           <Text style={styles.hintTitle}>Guess the English meaning:</Text>
           <View style={styles.wordInfoContainer}>
             <Text style={styles.hintText}>{targetCard.front}</Text>
             {targetCard.phonetic && <Text style={styles.phoneticText}> ({targetCard.phonetic})</Text>}
           </View>
-        </View>
+        </Animated.View>
         
         {renderHangman()}
         
         {renderWord()}
         
         <View style={styles.keyboardContainer}>
-          <View style={styles.keyboardRow}>
+          <Animated.View 
+            style={[
+              styles.keyboardRow,
+              {
+                opacity: keyboardRowAnimations[0],
+                transform: [
+                  {
+                    translateY: keyboardRowAnimations[0].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
             {['a','b','c','d','e','f','g'].map(letter => renderLetterButton(letter))}
-          </View>
-          <View style={styles.keyboardRow}>
+          </Animated.View>
+          
+          <Animated.View 
+            style={[
+              styles.keyboardRow,
+              {
+                opacity: keyboardRowAnimations[1],
+                transform: [
+                  {
+                    translateY: keyboardRowAnimations[1].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
             {['h','i','j','k','l','m','n'].map(letter => renderLetterButton(letter))}
-          </View>
-          <View style={styles.keyboardRow}>
+          </Animated.View>
+          
+          <Animated.View 
+            style={[
+              styles.keyboardRow,
+              {
+                opacity: keyboardRowAnimations[2],
+                transform: [
+                  {
+                    translateY: keyboardRowAnimations[2].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
             {['o','p','q','r','s','t','u'].map(letter => renderLetterButton(letter))}
-          </View>
-          <View style={styles.keyboardRow}>
+          </Animated.View>
+          
+          <Animated.View 
+            style={[
+              styles.keyboardRow,
+              {
+                opacity: keyboardRowAnimations[3],
+                transform: [
+                  {
+                    translateY: keyboardRowAnimations[3].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
             {['v','w','x','y','z'].map(letter => renderLetterButton(letter))}
-          </View>
+          </Animated.View>
         </View>
       </View>
     </View>
@@ -231,39 +416,58 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: 15,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 20,
-    margin: 10,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    margin: 0,
     width: '100%',
+    height: '100%',
   },
   gameContent: {
     flex: 1,
     width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   loadingText: {
     fontSize: 18,
-    color: '#333',
+    color: '#777',
     marginTop: 20,
   },
   hintContainer: {
-    backgroundColor: 'white',
-    padding: 10,
-    borderRadius: 15,
+    backgroundColor: '#F7F7F7',
+    padding: 15,
+    borderRadius: 16,
     marginVertical: 6,
     width: '100%',
     alignItems: 'center',
+    shadowColor: '#DDDDDD',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
   hintTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#4b4b4b',
     marginBottom: 5,
   },
   hintText: {
     fontSize: 18,
-    color: '#007AFF',
+    color: '#1CB0F6',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  wordInfoContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  phoneticText: {
+    fontSize: 16,
+    color: '#777',
     textAlign: 'center',
   },
   hangmanContainer: {
@@ -284,10 +488,10 @@ const styles = StyleSheet.create({
     margin: 4,
   },
   hangmanStateUsed: {
-    backgroundColor: '#E91E63',
+    backgroundColor: '#FF4B4B',
   },
   hangmanStateAvailable: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#58CC02',
   },
   wordContainer: {
     flexDirection: 'row',
@@ -297,17 +501,17 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   letterBox: {
-    width: 26,
-    height: 36,
+    width: 32,
+    height: 40,
     borderBottomWidth: 2,
-    borderBottomColor: '#333',
+    borderBottomColor: '#4b4b4b',
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 3,
+    margin: 4,
   },
   letter: {
     fontSize: 24,
-    color: '#333',
+    color: '#4b4b4b',
     fontWeight: 'bold',
   },
   space: {
@@ -317,31 +521,39 @@ const styles = StyleSheet.create({
   keyboardContainer: {
     width: '100%',
     marginTop: 5,
+    marginBottom: 10,
   },
   keyboardRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 3,
+    marginVertical: 4,
   },
   letterButton: {
     width: 38,
     height: 38,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    backgroundColor: '#1CB0F6',
+    borderRadius: 10,
     margin: 3,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#0e82b4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   letterButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     color: 'white',
     fontWeight: 'bold',
   },
   correctLetter: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#58CC02',
+    shadowColor: '#45a100',
   },
   wrongLetter: {
-    backgroundColor: '#E91E63',
+    backgroundColor: '#FF4B4B',
+    shadowColor: '#d62828',
   },
   guessedLetterText: {
     color: 'white',

@@ -235,9 +235,7 @@ export default function PhoneticChoice({ dueCards, onAnswer, showResult }) {
             </View>
           )}
         </TouchableOpacity>
-        <Text style={styles.instructions}>
-          Listen and select the correct phonetic
-        </Text>
+
       </View>
       
       <View style={styles.optionsContainer}>
@@ -285,9 +283,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   title: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'PressStart2P',
     color: '#333',
+    marginTop: 20,
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -363,6 +362,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     textAlign: 'center',
-    fontFamily: 'PressStart2P',
   },
 });

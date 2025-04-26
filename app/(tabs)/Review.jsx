@@ -1,4 +1,5 @@
 // Review.jsx
+// cardId: selectedDueCards[0].id, activity: 0 is the card that will be used for the first round
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -11,74 +12,31 @@ import {
   Animated,
   ScrollView,
   Easing,
+  Image,
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
-import PairOrNotPair from './learningComponent/2PairOrNotPair';
-import ListenResponse from './learningComponent/4ListenResponse';
+import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import PairOrNotPair from './learningComponent/0PairOrNotPairWord.jsx';
+import ListenResponse from './learningComponent/2ListenResponse.jsx';
 import MemoryGame from './learningComponent/1MemoryGame';
-import SpinWheel from './learningComponent/3SpinWheel';
-import TrueOrFalse from './learningComponent/6TrueOrFalse';
-import ListenWrite from './learningComponent/5ListenWrite';
-import SentencePairOrNotPair from './learningComponent/7PairOrNotPair';
+import SpinWheel from './learningComponent/1SpinWheel.jsx';
+import Match from './learningComponent/2MatchOrNot.jsx';
+import ListenWrite from './learningComponent/2ListenWrite.jsx';
+import SentencePairOrNotPair from './learningComponent/2PairOrNotPairSentence.jsx';
 import Hangman from './learningComponent/0Hangman';
-import PhoneticChoice from './learningComponent/8WhichPhonetic';
+import PhoneticChoice from './learningComponent/0WhichPhonetic.jsx';
+import SentencePick from './learningComponent/2SentencePick.jsx';
+import ForeignSentenceWrite from './learningComponent/2ForeignSentenceWrite.jsx';
+import SentenceJumble from './learningComponent/2SentenceJumble.jsx';
+import Unjumble from './learningComponent/2Unjumble.jsx';
+import ImagePicker from './learningComponent/0ImagePicker.jsx';
+import ImagePickerReverse from './learningComponent/0ImagePickerReverse.jsx';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import catAnimations from './CatAnimations.jsx';
-import { RunningCat, AnimatedCat } from './CatAnimations.jsx';
+
 
 const db = SQLite.openDatabaseSync('mydb.db');
 const { width, height } = Dimensions.get('window');
-
-// Add adventure situations - 20 different scenarios
-const adventureSituations = [
-  "Kitty ventures out of the house looking for adventure...",
-  "Kitty discovers a mysterious alley with glowing eyes watching from the shadows...",
-  "Kitty climbs to the top of a tall tree and surveys its kingdom from above...",
-  "Kitty finds an unattended fish market stall with delicious treasures...",
-  "Kitty follows a butterfly through a colorful garden of strange plants...",
-  "Kitty sneaks into a neighbor's backyard BBQ party...",
-  "Kitty explores an abandoned warehouse full of interesting smells...",
-  "Kitty races against neighborhood squirrels in the park...",
-  "Kitty discovers a warm laundry basket fresh from the dryer...",
-  "Kitty investigates strange noises coming from under the porch...",
-  "Kitty finds a sunny spot by the window in the library...",
-  "Kitty follows the scent of cooking to a restaurant's back door...",
-  "Kitty chases fallen leaves blowing in the autumn wind...",
-  "Kitty finds a forgotten toy mouse under the couch...",
-  "Kitty stalks the mysterious red dot that appears on walls...",
-  "Kitty patrols the neighborhood fence line looking for intruders...",
-  "Kitty discovers a box left on the doorstep and investigates...",
-  "Kitty watches birds at the feeder through the window...",
-  "Kitty explores the roof and finds a perfect napping spot...",
-  "Kitty follows a trail of interesting scents through the garden..."
-];
-
-// Add good and bad outcomes for each round
-const goodOutcomes = [
-  "The sushi chef one block away gave kitty some raw sashimi. Hunger -2.",
-  "A kind elderly woman offered kitty some fresh cream. Thirst -3.",
-  "Kitty found a sunny spot to nap in the park. Energy +3.",
-  "Children gently petted kitty and gave treats. Happiness +2.",
-  "Kitty found an open window to a warm house. Comfort +3.",
-  "A family having a picnic shared some turkey. Hunger -3.",
-  "Kitty discovered a hidden cache of catnip. Joy +4.",
-  "A friendly dog surprisingly offered to share toys. Friendship +2.",
-  "Kitty was adopted for the day by a nice family. Love +3.",
-  "Kitty found a comfortable box to hide in. Security +2."
-];
-
-const badOutcomes = [
-  "Kitty got chased by a neighborhood dog. Pride -1.",
-  "It started to rain and kitty got soaked. Comfort -2.",
-  "Kitty got stuck in a tree and needed help. Dignity -3.",
-  "Kitty knocked over a trash can making a mess. Stealth -2.",
-  "A grumpy homeowner shooed kitty away. Feelings -1.",
-  "Kitty's prey escaped at the last moment. Hunting -2.",
-  "Kitty stepped in a puddle and got paws wet. Comfort -1.",
-  "Kitty got lost and took hours to find home. Energy -3.",
-  "Kitty was startled by a loud car horn. Courage -2.",
-  "A rival cat challenged kitty's territory. Confidence -1."
-];
 
 /* -------------------------------
    CatAnimation Component (Frame-by-Frame)
@@ -87,6 +45,8 @@ const CatAnimation = ({ spriteSrc, frames }) => {
   const translateX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!spriteSrc || !frames) return;
+    
     let currentFrame = 0;
     const frameDuration = 100;
     const interval = setInterval(() => {
@@ -95,7 +55,9 @@ const CatAnimation = ({ spriteSrc, frames }) => {
     }, frameDuration);
 
     return () => clearInterval(interval);
-  }, [frames, translateX]);
+  }, [frames, translateX, spriteSrc]);
+
+  if (!spriteSrc || !frames) return null;
 
   return (
     <View style={{ width: 64, height: 64, overflow: 'hidden', marginBottom: 10 }}>
@@ -111,7 +73,6 @@ const CatAnimation = ({ spriteSrc, frames }) => {
    GameTemplate Component
 ---------------------------------*/
 function GameTemplate({
-  progress,
   onConfirm,
   onSkip,
   onBack,
@@ -124,15 +85,19 @@ function GameTemplate({
   currentRound,
   totalRounds,
   gold,
-  hideConfirm,
-  spriteSrc,
-  spriteFrames,
-  adventureText
+  currentCard,
+  onPlayAudio,
 }) {
   const popupScale = useRef(new Animated.Value(0.8)).current;
   const popupOpacity = useRef(new Animated.Value(0)).current;
   const popupTranslate = useRef(new Animated.Value(50)).current;
   const [showingPopup, setShowingPopup] = useState(false);
+  const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+
+  // Reset example index when popup data changes
+  useEffect(() => {
+    setCurrentExampleIndex(0);
+  }, [popupData]);
 
   // Handle popup appearance and animations
   useEffect(() => {
@@ -157,85 +122,283 @@ function GameTemplate({
   const roundProgress = (currentRound / totalRounds) * 100;
 
   return (
-    <ImageBackground source={require('../asset/background.png')} style={styles.bgImage}>
-      <View style={styles.container}>
-        <View style={styles.navBar}>
-          {/* Navigation Buttons at the top */}
-          <View style={styles.navButtonsContainer}>
-            <TouchableOpacity onPress={onBack} style={styles.navButton}>
-              <Text style={styles.navButtonText}>← Back</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onSkip} style={styles.navButton}>
-              <Text style={styles.navButtonText}>Skip →</Text>
-            </TouchableOpacity>
+    <View style={styles.container}>
+      <View style={styles.navBar}>
+        {/* Navigation Buttons at the top */}
+        <View style={styles.navButtonsContainer}>
+          <TouchableOpacity onPress={onBack} style={styles.navButton}>
+            <Text style={styles.navButtonText}>← Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onSkip} style={styles.navButton}>
+            <Text style={styles.navButtonText}>Skip →</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Stats below navigation buttons */}
+        <View style={styles.statsInNav}>
+          <View style={styles.statItem}>
+            <Text style={styles.statIcon}>❤️</Text>
+            <Text style={styles.statValue}>{lives}</Text>
           </View>
           
-          {/* Stats below navigation buttons */}
-          <View style={styles.statsInNav}>
-            <View style={styles.statItem}>
-              <Text style={styles.statIcon}>❤️</Text>
-              <Text style={styles.statValue}>{lives}</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.roundProgress}>
-                <Text style={styles.statLabel}>Round {currentRound}/{totalRounds}</Text>
-                <View style={styles.progressBarContainer}>
-                  <View style={[styles.progressBar, { width: `${roundProgress}%` }]} />
-                </View>
+          <View style={styles.statItem}>
+            <View style={styles.roundProgress}>
+              <Text style={styles.statLabel}>Round {currentRound}/{totalRounds}</Text>
+              <View style={styles.progressBarContainer}>
+                <View style={[styles.progressBar, { width: `${roundProgress}%` }]} />
               </View>
             </View>
-            
-            <View style={styles.statItem}>
-              <Text style={styles.statIcon}>💰</Text>
-              <Text style={styles.statValue}>{gold}</Text>
-            </View>
           </View>
           
-          {/* Cat Adventure Text Container - smaller text, full width */}
-          <View style={styles.catAnimationContainer}>
-            <Text style={styles.adventureText}>{adventureText || "Kitty ventures out..."}</Text>
+          <View style={styles.statItem}>
+            <Text style={styles.statIcon}>💰</Text>
+            <Text style={styles.statValue}>{gold}</Text>
           </View>
         </View>
+      </View>
 
-        <View style={styles.contentArea}>{children}</View>
+      <View style={styles.contentArea}>{children}</View>
 
-        {toastMessage && (
-          <Animated.View
-            style={[
-              styles.popupContainer,
-              {
-                transform: [{ translateY: popupTranslate }, { scale: popupScale }],
-                opacity: popupOpacity,
-                backgroundColor: toastType === 'correct' ? '#4CAF50' : '#E91E63',
-              },
-            ]}
-          >
-            <View style={styles.popupContent}>
-              <Text style={styles.popupTitle}>{toastMessage}</Text>
-              
-              {popupData && (
-                <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
-                  <View style={styles.cardContainer}>
-                    <View style={styles.cardContent}>
-                      {popupData.split('\n').map((line, i) => (
-                        <Text key={i} style={styles.cardText}>{line.replace(/#/g, '')}</Text>
-                      ))}
-                    </View>
+      {toastMessage && (
+        <Animated.View
+          style={[
+            styles.popupContainer,
+            {
+              transform: [{ translateY: popupTranslate }, { scale: popupScale }],
+              opacity: popupOpacity,
+            },
+          ]}
+        >
+          <View style={[
+            styles.popupHeader,
+            toastType === 'correct' ? styles.correctHeader : styles.incorrectHeader
+          ]}>
+            <Text style={[
+              styles.popupTitle,
+              toastType === 'wrong' ? styles.incorrectTitle : null
+            ]}>
+              {toastMessage}
+            </Text>
+          </View>
+          
+          <View style={styles.popupContent}>
+            {/* Image display with overlaid word info */}
+            {popupData && typeof popupData === 'object' && (
+              <View style={styles.imageContainer}>
+                {popupData.imageUrl ? (
+                  <Image 
+                    source={{ uri: popupData.imageUrl }} 
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.cardImage, {backgroundColor: '#e0e0e0'}]} />
+                )}
+                
+                {/* Overlay word info */}
+                <View style={styles.wordOverlay}>
+                  <View style={styles.wordInfoTextContainer}>
+                    <Text style={styles.frontText}>{popupData.front}</Text>
+                    {popupData.phonetic && (
+                      <Text style={styles.phoneticText}>[{popupData.phonetic}]</Text>
+                    )}
+                    {popupData.back && (
+                      <Text style={styles.backText}>- {popupData.back}</Text>
+                    )}
                   </View>
-                </ScrollView>
-              )}
-              
+                  
+                  {popupData.frontAudio && (
+                    <TouchableOpacity 
+                      style={styles.wordAudioButton}
+                      onPress={() => onPlayAudio(popupData.frontAudio)}
+                    >
+                      <Text style={styles.wordAudioIcon}>🔊</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+            
+            {/* Examples with side navigation */}
+            {popupData && typeof popupData === 'object' && popupData.examples && popupData.examples.length > 0 && (
+              <ScrollView style={styles.examplesScrollView} contentContainerStyle={styles.examplesScrollContent}>
+                <View style={styles.examplesOuterWrapper}>
+                  <View style={styles.examplesWrapper}>
+                    {/* Left arrow navigation */}
+                    {popupData.examples.length > 1 && (
+                      <TouchableOpacity 
+                        style={[
+                          styles.sideNavigationArrow, 
+                          styles.leftArrow,
+                          currentExampleIndex === 0 && styles.arrowDisabled
+                        ]} 
+                        onPress={() => {
+                          if (currentExampleIndex > 0) {
+                            setCurrentExampleIndex(currentExampleIndex - 1);
+                          }
+                        }}
+                        disabled={currentExampleIndex === 0}
+                      >
+                        <Text style={styles.sideArrowText}>←</Text>
+                      </TouchableOpacity>
+                    )}
+                    
+                    {/* Display only single current example */}
+                    <View style={styles.exampleContainer}>
+                      {/* Current example */}
+                      {popupData.examples[currentExampleIndex] && (
+                        <>
+                          {/* Question section */}
+                          <View style={styles.exampleSection}>
+                            <View style={styles.exampleHeaderRow}>
+                              <Text style={styles.exampleSectionTitle}>Question:</Text>
+                              {popupData.examples[currentExampleIndex].questionAudio && (
+                                <TouchableOpacity 
+                                  style={styles.pronunciationButton}
+                                  onPress={() => onPlayAudio(popupData.examples[currentExampleIndex].questionAudio)}
+                                >
+                                  <Text style={styles.pronunciationIcon}>🔊</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                            
+                            <ScrollView style={styles.exampleContentScroll} nestedScrollEnabled={true}>
+                              <Text style={styles.exampleQuestion}>{popupData.examples[currentExampleIndex].question}</Text>
+                              <Text style={styles.examplePhonetic}>{popupData.examples[currentExampleIndex].questionPhonetic}</Text>
+                            </ScrollView>
+                          </View>
+                          
+                          {/* Answer section */}
+                          <View style={[styles.exampleSection, styles.answerSection]}>
+                            <View style={styles.exampleHeaderRow}>
+                              <Text style={styles.exampleSectionTitle}>Answer:</Text>
+                              {popupData.examples[currentExampleIndex].answerAudio && (
+                                <TouchableOpacity 
+                                  style={styles.pronunciationButton}
+                                  onPress={() => onPlayAudio(popupData.examples[currentExampleIndex].answerAudio)}
+                                >
+                                  <Text style={styles.pronunciationIcon}>🔊</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                            
+                            <ScrollView style={styles.exampleContentScroll} nestedScrollEnabled={true}>
+                              <Text style={styles.exampleAnswer}>{popupData.examples[currentExampleIndex].answer}</Text>
+                              <Text style={styles.examplePhonetic}>{popupData.examples[currentExampleIndex].answerPhonetic}</Text>
+                            </ScrollView>
+                          </View>
+                          
+                          {/* Example counter at bottom right */}
+                          {popupData.examples.length > 1 && (
+                            <View style={styles.exampleCountIndicator}>
+                              <Text style={styles.exampleCountText}>
+                                {currentExampleIndex + 1} / {popupData.examples.length}
+                              </Text>
+                            </View>
+                          )}
+                        </>
+                      )}
+                    </View>
+                    
+                    {/* Right arrow navigation */}
+                    {popupData.examples.length > 1 && (
+                      <TouchableOpacity 
+                        style={[
+                          styles.sideNavigationArrow, 
+                          styles.rightArrow,
+                          currentExampleIndex === popupData.examples.length - 1 && styles.arrowDisabled
+                        ]} 
+                        onPress={() => {
+                          if (currentExampleIndex < popupData.examples.length - 1) {
+                            setCurrentExampleIndex(currentExampleIndex + 1);
+                          }
+                        }}
+                        disabled={currentExampleIndex === popupData.examples.length - 1}
+                      >
+                        <Text style={styles.sideArrowText}>→</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+            
+            {/* Handle legacy string format */}
+            {popupData && typeof popupData === 'string' && (
+              <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
+                <View style={styles.cardContainer}>
+                  <View style={styles.cardContent}>
+                    {popupData.split('\n').map((line, i) => (
+                      <Text key={i} style={[
+                        styles.cardText,
+                        i === 0 ? styles.frontText : null,
+                        i === 1 ? styles.phoneticText : null,
+                        i === 2 ? styles.backText : null,
+                      ]}>
+                        {line}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+            
+            {/* Continue button at bottom, but always visible */}
+            <View style={styles.continueButtonContainer}>
               <TouchableOpacity onPress={onConfirm} style={styles.popupButton}>
                 <Text style={styles.popupButtonText}>{actionButtonText}</Text>
               </TouchableOpacity>
             </View>
-          </Animated.View>
-        )}
-      </View>
-    </ImageBackground>
+          </View>
+        </Animated.View>
+      )}
+    </View>
   );
 }
+
+/* -------------------------------
+   ChestView Component for Evaluation
+---------------------------------*/
+const ChestView = ({ chestIndex }) => {
+  // Use the same values as in ChestSlot in CatSection.jsx
+  const frameWidth = 30; // CHEST_VISIBLE_WIDTH
+  const frameHeight = 22; // CHEST_VISIBLE_HEIGHT
+  
+  // For first chest, it's at position (0,10) in the sprite sheet
+  // Just use that value directly if chestIndex is 0
+  const topOffset = chestIndex === 0 ? 10 : 
+                    chestIndex === 1 ? 74 :
+                    chestIndex === 2 ? 138 :
+                    202; // fourth chest
+  
+  return (
+    <View style={styles.chestViewContainer}>
+      <Text style={styles.chestRewardText}>New Reward Chest!</Text>
+      <View style={styles.chestImageContainer}>
+        <View style={{
+          width: frameWidth,
+          height: frameHeight,
+          transform: [{ scale: 2.5 }],
+          overflow: 'hidden',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <Image
+            source={require('../asset/Chests.png')}
+            style={{
+              position: 'absolute',
+              top: -topOffset,
+              left: 0,
+              width: 240,
+              height: 256,
+            }}
+          />
+        </View>
+      </View>
+      <Text style={styles.chestInstructionText}>This chest will be added to your collection</Text>
+    </View>
+  );
+};
 
 /* -------------------------------
    CardResult Component for Evaluation Page
@@ -260,10 +423,6 @@ const CardResult = ({ card, results, originalCard }) => {
             Streak: {card.consecutiveCorrectAnswersCount || 0} • 
             In Wrong Queue: {JSON.parse(card.wrongQueue || "[false,0]")[0] ? 'Yes' : 'No'}
           </Text>
-        </View>
-        <View style={styles.cardResultRow}>
-          <Text style={styles.cardResultLabel}>Last Review:</Text>
-          <Text style={styles.cardResultValue}>{new Date(card.lastReviewDate).toLocaleString()}</Text>
         </View>
         <View style={styles.cardResultRow}>
           <Text style={styles.cardResultLabel}>Next Review:</Text>
@@ -291,9 +450,8 @@ export default function Review() {
   const { deckName } = useLocalSearchParams();
   const [reviewStarted, setReviewStarted] = useState(false);
   const [allCards, setAllCards] = useState([]);
-  const [dueCards, setDueCards] = useState([]);
-  const [optionalCards, setOptionalCards] = useState([]);
-  const [currentActivity, setCurrentActivity] = useState(0);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [otherCards, setOtherCards] = useState([]);
   const [currentRound, setCurrentRound] = useState(1);
   const [gold, setGold] = useState(0);
   const [lives, setLives] = useState(3);
@@ -308,22 +466,22 @@ export default function Review() {
   const [currentFrames, setCurrentFrames] = useState(null);
   const [cardResults, setCardResults] = useState({});
   const [showEvaluation, setShowEvaluation] = useState(false);
-  const [currentCardId, setCurrentCardId] = useState(null);
-  const [totalRounds, setTotalRounds] = useState(0);
-  const [roundToCardActivityMap, setRoundToCardActivityMap] = useState({});
-  const [modifiedCards, setModifiedCards] = useState({});
-  const [originalCards, setOriginalCards] = useState({});
-  const [adventureText, setAdventureText] = useState(adventureSituations[0]);
+  const [totalRounds, setTotalRounds] = useState(1); // Only one round now
+  const [originalCardData, setOriginalCardData] = useState(null);
+  const [modifiedCardData, setModifiedCardData] = useState(null);
+  const [sound, setSound] = useState(null);
+  const [occupiedChests, setOccupiedChests] = useState(0);
+  const [showChest, setShowChest] = useState(false);
+  const [chestImage, setChestImage] = useState(null);
 
   const goodEvents = [
-    { message: 'Correct!\nThe sushi chef one block away gave it raw sashimi.\nHunger -2', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Dance.png'), frames: 4 },
-    { message: 'Correct!\nKitty found a sunny spot to nap in the park.\nEnergy +3', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png'), frames: 10 },
-    { message: 'Correct!\nA kind neighbor gave kitty some treats.\n+2 gold', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png'), frames: 10 },
+    { message: 'Correct!', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Dance.png'), frames: 4 },
+    { message: 'Correct!', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png'), frames: 10 },
   ];
 
   const badEvents = [
-    { message: 'Wrong!\nKitty got chased by a neighborhood dog.\nPride -1', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Hurt.png'), frames: 8 },
-    { message: 'Wrong!\nKitty got caught in the rain.\nEnergy -2', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Sleeping.png'), frames: 4 },
+    { message: 'Wrong!', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Hurt.png'), frames: 8 },
+    { message: 'Wrong!', sprite: require('../asset/RetroCatsPaid/Cats/Sprites/Sleeping.png'), frames: 4 },
   ];
 
   // Function to update a card's SRS parameters based on results
@@ -333,23 +491,17 @@ export default function Review() {
     if (correct) {
       // All questions for this card were answered correctly
       const lastReviewDate = new Date().toISOString();
-
-      let diffHours = 0
+      let diffHours = 6; // Default interval
 
       if (card.nextReviewDate !== card.lastReviewDate) {
-        console.log(`this is when they are different: ${diffHours}`)
         diffHours = Math.ceil(
           (new Date(card.nextReviewDate) - new Date(card.lastReviewDate)) / (1000 * 60 * 60)
-        )
-      } else {
-        console.log(`this is when they are the same: ${diffHours}`)
-        diffHours = 6
+        );
       }
       
-      
-      // Calculate new interval based on ease factor (default 1.5)
+      // Calculate new interval based on ease factor
       const nextReviewDate = new Date();
-      nextReviewDate.setHours(nextReviewDate.getHours() + diffHours * card.easeFactor)
+      nextReviewDate.setHours(nextReviewDate.getHours() + diffHours * card.easeFactor);
       
       newCard.lastReviewDate = lastReviewDate;
       newCard.nextReviewDate = nextReviewDate.toISOString();
@@ -368,124 +520,106 @@ export default function Review() {
     return newCard;
   };
 
-  // Function to update optional cards
-  const updateOptionalCard = (card, correct) => {
-    if (!correct) return card; // No changes if answered incorrectly
-    
-    const newCard = { ...card };
-    const wrongQueue = JSON.parse(card.wrongQueue || "[false,0]");
-    
-    if (!wrongQueue[0]) { // If not in wrong queue
-      if (wrongQueue[1] === 0) {
-        newCard.wrongQueue = JSON.stringify([false, 1]);
-      } else if (wrongQueue[1] === 1) {
-        newCard.wrongQueue = JSON.stringify([false, 2]);
-      } else if (wrongQueue[1] === 2) {
-        newCard.wrongQueue = JSON.stringify([true, 0]);
+  // Function to play sound based on answer correctness
+  const playSound = async (isCorrect) => {
+    try {
+      // Unload previous sound if it exists
+      if (sound) {
+        await sound.unloadAsync();
       }
+      
+      // Load the appropriate sound file
+      const soundFile = isCorrect 
+        ? require('../asset/music/correct.mp3') 
+        : require('../asset/music/wrong.mp3');
+      
+      const { sound: newSound } = await Audio.Sound.createAsync(soundFile);
+      setSound(newSound);
+      
+      await newSound.setVolumeAsync(isCorrect ? 0.5 : 1.0);
+      await newSound.playAsync();
+    } catch (error) {
+      console.error('Error playing sound:', error);
     }
-    
-    // Ensure ease factor is stored as string
-    newCard.easeFactor = parseFloat(card.easeFactor || 1.5).toFixed(1);
-    
-    return newCard;
   };
+
+  // Function to play finish sound
+  const playFinishSound = async () => {
+    try {
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../asset/music/finish.mp3')
+      );
+      setSound(newSound);
+      await newSound.playAsync();
+    } catch (error) {
+      console.error('Error playing finish sound:', error);
+    } 
+  };
+
+  // Clean up sound on component unmount
+  useEffect(() => {
+    return sound
+      ? () => {
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
 
   useEffect(() => {
     if (deckName && !reviewStarted) {
       try {
-        const items = db.getAllSync(`SELECT * FROM ${deckName}`);
+        // Load the deck and set up the review
+        const loadDeckAndSetup = async () => {
+          try {
+            // Get occupiedChests from AsyncStorage
+            const occupiedChestsStr = await AsyncStorage.getItem('occupiedChestsCount');
+            const chestCount = parseInt(occupiedChestsStr || '0');
+            setOccupiedChests(chestCount);
+            
+            const items = db.getAllSync(`SELECT * FROM ${deckName}`);
+            setAllCards(items);
+            
+            const now = new Date();
+            
+            // Filter cards into due cards
+            const dueCards = items.filter(c => {
+              return now >= new Date(c.nextReviewDate);
+            }).sort((a, b) => new Date(a.nextReviewDate) - new Date(b.nextReviewDate));
+            
+            if (dueCards.length < 3) {
+              Alert.alert('Not enough due cards', `Need at least 3, but got ${dueCards.length}.`);
+              return;
+            }
+
+            // Select one card for review and two others for options
+            const selectedDueCard = dueCards[0];
+            setSelectedCard(selectedDueCard);
+            setOriginalCardData({...selectedDueCard});
+            
+            // Select two other cards for options in ImagePickerReverse
+            setOtherCards(dueCards.slice(1, 3));
+            
+            // Set total rounds to 1 (just one activity)
+            setTotalRounds(1);
+            setCurrentRound(1);
+            setReviewStarted(true);
+          } catch (error) {
+            console.error("Error loading deck:", error);
+            Alert.alert("Error", `Failed to load deck: ${error.message}`);
+          }
+        };
         
-        // Store all cards
-        setAllCards(items);
-        
-        const now = new Date();
-        
-        // Regular cards (wrongQueue is false)
-        const regularCards = items.filter(c => {
-          const wrongQueue = JSON.parse(c.wrongQueue || "[false,0]");
-          return !wrongQueue[0] && now >= new Date(c.nextReviewDate);
-        });
-        
-        // Sort by next review date (furthest first)
-        regularCards.sort((a, b) => new Date(a.nextReviewDate) - new Date(b.nextReviewDate));
-        
-        // Wrong queue cards (wrongQueue is true)
-        const wrongQueueCards = items.filter(c => {
-          const wrongQueue = JSON.parse(c.wrongQueue || "[false,0]");
-          return wrongQueue[0];
-        });
-        
-        // Sort by last review date (oldest first)
-        wrongQueueCards.sort((a, b) => new Date(a.lastReviewDate) - new Date(b.lastReviewDate));
-        
-        if (regularCards.length < 3) {
-          Alert.alert('Not enough due cards', `Need at least 3, but got ${regularCards.length}.`);
-          return;
-        }
-        
-        // Take up to 5 regular cards
-        const selectedDueCards = regularCards.slice(0, Math.min(5, regularCards.length));
-        
-        // Take up to 2 wrong queue cards
-        const selectedOptionalCards = wrongQueueCards.slice(0, Math.min(2, wrongQueueCards.length));
-        
-        // Store original cards for comparison later
-        const originals = {};
-        [...selectedDueCards, ...selectedOptionalCards].forEach(card => {
-          originals[card.id] = { ...card };
-        });
-        setOriginalCards(originals);
-        
-        // Calculate total rounds and create round-to-card-activity mapping
-        let roundCount = 1;
-        const roundMap = {};
-        
-        // For each regular card, assign 3 activities (0-8)
-        selectedDueCards.forEach((card, idx) => {
-          // Assign activities based on card index
-          const activities = [];
-          if (idx === 0) activities.push(0, 1, 2);
-          else if (idx === 1) activities.push(3, 4, 5);
-          else if (idx === 2) activities.push(6, 7, 8);
-          else if (idx === 3) activities.push(0, 3, 6); // Additional cards use activities again
-          else if (idx === 4) activities.push(1, 4, 7);
-          
-          // Map each activity to a round
-          activities.forEach(activity => {
-            roundMap[roundCount] = { cardId: card.id, activity, isOptional: false };
-            roundCount++;
-          });
-        });
-        
-        // For optional cards, assign 1 activity each
-        selectedOptionalCards.forEach((card, idx) => {
-          const activity = idx === 0 ? 0 : 1; // First uses activity 0, second uses activity 1
-          roundMap[roundCount] = { cardId: card.id, activity, isOptional: true };
-          roundCount++;
-        });
-        
-        setDueCards(selectedDueCards);
-        setOptionalCards(selectedOptionalCards);
-        setRoundToCardActivityMap(roundMap);
-        setTotalRounds(roundCount - 1);
-        
-        setReviewStarted(true);
+        loadDeckAndSetup();
       } catch (e) {
         console.error(e);
         Alert.alert('Error', `Could not load deck ${deckName}`);
       }
     }
   }, [deckName, reviewStarted]);
-
-  // Determine current card and activity based on round
-  useEffect(() => {
-    if (reviewStarted && roundToCardActivityMap[currentRound]) {
-      const { cardId, activity, isOptional } = roundToCardActivityMap[currentRound];
-      setCurrentCardId(cardId);
-      setCurrentActivity(activity);
-    }
-  }, [currentRound, reviewStarted, roundToCardActivityMap]);
   
   // Auto-continue effect when answer is locked
   useEffect(() => {
@@ -495,80 +629,78 @@ export default function Review() {
   }, [isAnswerLocked, showResult]);
 
   const handleRoundComplete = () => {
-    // Check if we've reached the end of all rounds
-    if (currentRound >= totalRounds) {
-      // Prepare evaluation data
-      const newModifiedCards = { ...modifiedCards };
-      
-      // Process regular cards
-      dueCards.forEach(card => {
-        const cardId = card.id;
-        const results = Object.entries(cardResults)
-          .filter(([round, result]) => roundToCardActivityMap[parseInt(round)]?.cardId === cardId)
-          .map(([_, result]) => result);
-        
-        const allCorrect = results.length > 0 && results.every(r => r);
-        
-        if (!newModifiedCards[cardId]) {
-          newModifiedCards[cardId] = { ...card };
-        }
-        
-        newModifiedCards[cardId] = updateCardSRS(newModifiedCards[cardId], allCorrect);
-      });
-      
-      // Process optional cards
-      optionalCards.forEach(card => {
-        const cardId = card.id;
-        const results = Object.entries(cardResults)
-          .filter(([round, result]) => roundToCardActivityMap[parseInt(round)]?.cardId === cardId)
-          .map(([_, result]) => result);
-        
-        const allCorrect = results.length > 0 && results.every(r => r);
-        
-        if (!newModifiedCards[cardId]) {
-          newModifiedCards[cardId] = { ...card };
-        }
-        
-        newModifiedCards[cardId] = updateOptionalCard(newModifiedCards[cardId], allCorrect);
-      });
-      
-      setModifiedCards(newModifiedCards);
-      setShowEvaluation(true);
-    } else {
-      // Move to next round and update adventure text
-      setCurrentRound(r => r + 1);
-      // Set a new random adventure text from the array
-      const nextIndex = Math.floor(Math.random() * adventureSituations.length);
-      setAdventureText(adventureSituations[nextIndex]);
+    // Process the card for evaluation
+    if (selectedCard) {
+      const result = cardResults[1] || false; // Get result from round 1
+      const updatedCard = updateCardSRS(selectedCard, result);
+      setModifiedCardData(updatedCard);
     }
+    
+    // Check if we can show a chest (when we have less than 4 occupied)
+    if (occupiedChests < 4) {
+      setShowChest(true);
+      
+      // Select a random chest index (0-3)
+      const chestIndex = Math.floor(Math.random() * 4);
+      setChestImage(chestIndex);
+      
+      // Store the selected chest index in AsyncStorage to pass it back to index
+      AsyncStorage.setItem('newChestIndex', chestIndex.toString());
+    }
+    
+    setShowEvaluation(true);
+    playFinishSound();
   };
 
   const handleSkip = () => {
-    // Mark the current round as wrong if skipped
-    if (currentRound) {
-      const newResults = { ...cardResults };
-      newResults[currentRound] = false; // Count as wrong answer
-      setCardResults(newResults);
-    }
+    // Mark current round as wrong if skipped
+    setCardResults(prev => ({...prev, [currentRound]: false}));
     
-    // Reduce lives and proceed to next round
     setLives(l => l - 1);
     handleRoundComplete();
   };
   
   const handleAnswer = (isCorrect, popupObj) => {
     setIsCorrectAnswer(isCorrect);
-    setPopupData(popupObj);
+    
+    // Create a rich popup data object with card details
+    if (selectedCard) {
+      try {
+        // Parse examples for the card
+        const examplesArray = Array.isArray(selectedCard.examples) 
+          ? selectedCard.examples 
+          : JSON.parse(selectedCard.examples || '[]');
+        
+        setPopupData({
+          imageUrl: selectedCard.imageUrl,
+          front: selectedCard.front,
+          phonetic: selectedCard.phonetic,
+          back: selectedCard.back,
+          frontAudio: selectedCard.frontAudio,
+          examples: examplesArray
+        });
+      } catch (error) {
+        console.error('Error parsing examples:', error);
+        setPopupData({
+          imageUrl: selectedCard.imageUrl,
+          front: selectedCard.front,
+          phonetic: selectedCard.phonetic,
+          back: selectedCard.back,
+          frontAudio: selectedCard.frontAudio,
+          examples: []
+        });
+      }
+    }
+    
     setIsAnswerLocked(true);
     
     // Record the result for this round
-    const newResults = { ...cardResults };
-    newResults[currentRound] = isCorrect;
-    setCardResults(newResults);
+    setCardResults(prev => ({...prev, [currentRound]: isCorrect}));
   };
 
   const handleContinue = () => {
     if (showResult) {
+      // Reset state and move to evaluation
       setShowResult(false);
       setToastMessage('');
       setToastType(null);
@@ -579,219 +711,140 @@ export default function Review() {
       handleRoundComplete();
     } else if (isAnswerLocked) {
       const correct = isCorrectAnswer;
-      const animation = catAnimations.getRandomAnimationWithMessage(correct);
       
-      // Update adventure text based on correct/incorrect answer
+      // Update feedback
       if (correct) {
-        const goodIndex = Math.floor(Math.random() * goodOutcomes.length);
         const goodEvent = goodEvents[Math.floor(Math.random() * goodEvents.length)];
-        setAdventureText(goodOutcomes[goodIndex]);
         setToastType('correct');
-        setToastMessage('Correct!'); // Simplified message
+        setToastMessage('Correct!');
         setCurrentSprite(goodEvent.sprite);
         setCurrentFrames(goodEvent.frames);
+        setGold(g => g + 10);
       } else {
-        const badIndex = Math.floor(Math.random() * badOutcomes.length);
         const badEvent = badEvents[Math.floor(Math.random() * badEvents.length)];
-        setAdventureText(badOutcomes[badIndex]);
         setToastType('wrong');
-        setToastMessage('Wrong!'); // Simplified message
+        setToastMessage('Wrong!');
         setCurrentSprite(badEvent.sprite);
         setCurrentFrames(badEvent.frames);
+        setLives(l => l - 1);
+      }
+      
+      // Play result sound first, then word audio after a delay
+      playSound(correct);
+      
+      // Get the current card for its audio
+      if (selectedCard && selectedCard.frontAudio) {
+        // Set a timeout to play the word audio after the result sound
+        setTimeout(async () => {
+          try {
+            if (sound) {
+              await sound.unloadAsync();
+            }
+            
+            const { sound: wordSound } = await Audio.Sound.createAsync(
+              { uri: selectedCard.frontAudio }
+            );
+            setSound(wordSound);
+            await wordSound.playAsync();
+          } catch (error) {
+            console.error('Error playing word audio:', error);
+          }
+        }, 1200); // Wait for result sound to complete
       }
       
       setShowResult(true);
-      
-      if (correct) setGold(g => g + 10);
-      else setLives(l => l - 1);
-      setProgress(p => Math.min(p + 100 / totalRounds, 100));
+      setProgress(100); // Set progress to 100% as there's only one round
     }
-  };
-
-  const handleRestart = () => {
-    setShowEvaluation(false);
-    setCurrentRound(1);
-    setCurrentActivity(0);
-    setGold(0);
-    setLives(3);
-    setCardResults({});
-    setProgress(0);
-    setModifiedCards({});
-  };
-
-  const getCurrentCard = () => {
-    if (!currentCardId) return null;
-    
-    // Check in regular cards first
-    const regularCard = dueCards.find(c => c.id === currentCardId);
-    if (regularCard) return regularCard;
-    
-    // Then check in optional cards
-    return optionalCards.find(c => c.id === currentCardId);
   };
 
   // Show evaluation page
   if (showEvaluation) {
     return (
-      <ImageBackground source={require('../asset/background.png')} style={styles.bgImage}>
-        <View style={styles.container}>
-          <View style={styles.evaluationHeader}>
-            <Text style={styles.evaluationTitle}>Review Completed!</Text>
-            <Text style={styles.evaluationSubtitle}>Final Score: {gold} Gold</Text>
-          </View>
-          
-          <ScrollView style={styles.evaluationScroll}>
-            <View style={styles.evaluationContent}>
-              {/* Regular Cards Results */}
-              <Text style={styles.evaluationSectionTitle}>Main Cards</Text>
-              {dueCards.map(card => {
-                const cardId = card.id;
-                const results = Object.entries(cardResults)
-                  .filter(([round, result]) => roundToCardActivityMap[parseInt(round)]?.cardId === cardId)
-                  .map(([_, result]) => result);
-                return (
-                  <CardResult 
-                    key={cardId}
-                    card={modifiedCards[cardId] || card}
-                    results={results}
-                    originalCard={originalCards[cardId] || card}
-                  />
-                );
-              })}
-              
-              {/* Optional Cards Results */}
-              {optionalCards.length > 0 && (
-                <>
-                  <Text style={styles.evaluationSectionTitle}>Optional Cards</Text>
-                  {optionalCards.map(card => {
-                    const cardId = card.id;
-                    const results = Object.entries(cardResults)
-                      .filter(([round, result]) => roundToCardActivityMap[parseInt(round)]?.cardId === cardId)
-                      .map(([_, result]) => result);
-                    return (
-                      <CardResult 
-                        key={cardId}
-                        card={modifiedCards[cardId] || card}
-                        results={results}
-                        originalCard={originalCards[cardId] || card}
-                      />
-                    );
-                  })}
-                </>
-              )}
-            </View>
-          </ScrollView>
-          
-          <View style={styles.evaluationButtons}>
-            <TouchableOpacity style={styles.evaluationButton} onPress={handleRestart}>
-              <Text style={styles.evaluationButtonText}>Restart Review</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.evaluationButton} onPress={() => router.back()}>
-              <Text style={styles.evaluationButtonText}>Back to Deck</Text>
-            </TouchableOpacity>
-          </View>
+      <View style={styles.container}>
+        <View style={styles.evaluationHeader}>
+          <Text style={styles.evaluationTitle}>Review Completed!</Text>
+          {showChest ? (
+            <ChestView chestIndex={chestImage} />
+          ) : (
+            <Text style={styles.evaluationSubtitle}>{gold} Gold</Text>
+          )}
         </View>
-      </ImageBackground>
+        
+        <ScrollView style={styles.evaluationScroll}>
+          <View style={styles.evaluationContent}>
+            {/* Card Result */}
+            <Text style={styles.evaluationSectionTitle}>Reviewed Card</Text>
+            {selectedCard && (
+              <CardResult 
+                key={selectedCard.id}
+                card={modifiedCardData || selectedCard}
+                results={[cardResults[1] || false]}
+                originalCard={originalCardData || selectedCard}
+              />
+            )}
+          </View>
+        </ScrollView>
+        
+        <View style={styles.evaluationButtons}>
+          <TouchableOpacity 
+            style={styles.evaluationButton} 
+            onPress={async () => {
+              if (showChest) {
+                // Set flag in AsyncStorage to add a new chest
+                await AsyncStorage.setItem('addNewChest', 'true');
+              }
+              router.back();
+            }}
+          >
+            <Text style={styles.evaluationButtonText}>CONTINUE</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   }
 
-  const currentCard = getCurrentCard();
-
+  // Main review screen
   return (
     <ImageBackground source={require('../asset/background.png')} style={styles.bgImage}>
       <GameTemplate
-        progress={progress}
         onConfirm={handleContinue}
         onSkip={handleSkip}
         onBack={() => router.back()}
         toastMessage={toastMessage}
         toastType={toastType}
         popupData={popupData}
-        actionButtonText={'Continue'}
+        actionButtonText="Continue"
         lives={lives}
         currentRound={currentRound}
         totalRounds={totalRounds}
         gold={gold}
-        hideConfirm={!showResult}
-        spriteSrc={currentSprite}
-        spriteFrames={currentFrames}
-        adventureText={adventureText}
+        currentCard={selectedCard}
+        onPlayAudio={(audioUri) => {
+          const playAudio = async (uri) => {
+            try {
+              if (sound) {
+                await sound.unloadAsync();
+              }
+              const { sound: newSound } = await Audio.Sound.createAsync(
+                { uri }
+              );
+              setSound(newSound);
+              await newSound.playAsync();
+            } catch (error) {
+              console.error('Error playing audio:', error);
+            }
+          };
+          playAudio(audioUri);
+        }}
       >
-        {currentCard && !showResult && (
-          <>
-            {currentActivity === 8 && (
-              <SentencePairOrNotPair 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 7 && (
-              <TrueOrFalse 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 6 && (
-              <ListenWrite 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 5 && (
-              <ListenResponse 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 4 && (
-              <SpinWheel 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 3 && (
-              <PairOrNotPair 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 2 && (
-              <MemoryGame 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 1 && (
-              <Hangman 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-            {currentActivity === 0 && (
-              <PhoneticChoice 
-                key={`${currentCardId}-${currentActivity}-${currentRound}`} 
-                dueCards={[currentCard, ...dueCards.filter(c => c.id !== currentCardId)]} 
-                onAnswer={handleAnswer} 
-                showResult={showResult} 
-              />
-            )}
-          </>
+        <View style={styles.divider} />
+        {selectedCard && !showResult && (
+          <ImagePickerReverse 
+            key={`${selectedCard.id}-0-1`} 
+            dueCards={[selectedCard, ...otherCards]} 
+            onAnswer={(isCorrect) => handleAnswer(isCorrect)}
+            showResult={showResult} 
+          />
         )}
       </GameTemplate>
     </ImageBackground>
@@ -800,41 +853,26 @@ export default function Review() {
 
 const styles = StyleSheet.create({
   bgImage: { 
-    flex: 1 
+    flex: 1,
+    backgroundColor: '#121212'
   },
   
   container: { 
     flex: 1, 
-    paddingTop: 30 
+    paddingTop: 0,
+    width: '100%',
+    backgroundColor: '#121212'
   },
   
-  // Updated navbar styles
   navBar: { 
     flexDirection: 'column', 
     justifyContent: 'flex-start', 
     padding: 15, 
-    backgroundColor: 'rgba(0,0,0,0.6)', 
-    marginHorizontal: 10, 
-    borderRadius: 10, 
-    marginTop: 10,
-  },
-  
-  catAnimationContainer: {
-    width: '100%',
-    height: 60,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 5,
-  },
-  
-  adventureText: {
-    fontFamily: 'PressStart2P',
-    fontSize: 10,
-    color: 'white',
-    textAlign: 'center',
-    lineHeight: 16,
+    paddingTop: 30,
+    backgroundColor: '#1E1E1E',
+    marginHorizontal: 0, 
+    borderRadius: 0, 
+    marginTop: 0,
   },
   
   navButtonsContainer: {
@@ -864,15 +902,16 @@ const styles = StyleSheet.create({
   },
   
   statValue: { 
-    fontFamily: 'PressStart2P', 
-    fontSize: 14, 
-    color: 'white'
+    fontFamily: 'System',
+    fontWeight: 'bold',
+    fontSize: 16, 
+    color: '#E0E0E0',
   },
   
   statLabel: {
-    fontFamily: 'PressStart2P',
-    fontSize: 10,
-    color: 'white',
+    fontFamily: 'System',
+    fontSize: 12,
+    color: '#BBBBBB',
     marginBottom: 3
   },
   
@@ -885,142 +924,428 @@ const styles = StyleSheet.create({
   
   progressBarContainer: {
     width: '100%',
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 4,
+    height: 10,
+    backgroundColor: 'rgba(80, 80, 80, 0.6)',
+    borderRadius: 10,
     overflow: 'hidden'
   },
   
   progressBar: {
     height: '100%',
-    backgroundColor: '#FFD700',
-    borderRadius: 4
+    backgroundColor: '#58CC02',
+    borderRadius: 10
   },
   
   contentArea: { 
     flex: 1, 
     width: '100%', 
-    padding: 20, 
+    padding: 0,
     alignItems: 'center', 
-    justifyContent: 'center' 
+    justifyContent: 'center',
+    borderRadius: 0,
+    backgroundColor: '#1A1A1A',
+  },
+  
+  divider: {
+    height: 1,
+    width: '100%',
+    backgroundColor: '#333333',
+    marginVertical: 5,
   },
   
   navButton: { 
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 8,
+    padding: 12,
+    backgroundColor: 'rgba(40, 40, 40, 0.8)',
+    borderRadius: 16,
     marginHorizontal: 5,
     flex: 1,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#333333',
   },
   
   navButtonText: { 
-    color: 'white', 
+    color: '#58CC02',
     fontSize: 14, 
-    fontFamily: 'PressStart2P' 
+    fontWeight: 'bold',
+    fontFamily: 'System',
   },
   
   popupContainer: { 
     position: 'absolute',
-    top: 230, // Add more gap below the nav bar
-    bottom: 20, // Stretch all the way down to near the bottom
-    alignSelf: 'center',
-    zIndex: 999,
-    backgroundColor: '#4CAF50', 
-    borderRadius: 10, 
-    padding: 15, 
-    marginHorizontal: 10, // Match nav bar margins
-    width: width - 20, // Match nav bar width (screen width - margins)
+    top: 120,
+    bottom: 30,
+    left: 15,
+    right: 15,
+    zIndex: 5,
+    backgroundColor: '#252525',
+    borderRadius: 20, 
+    padding: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 10,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    borderWidth: 1,
+    borderColor: '#333333',
   },
   
   popupContent: { 
+    flex: 1,
     alignItems: 'center', 
+    width: '100%',
+    paddingBottom: 0,
     justifyContent: 'space-between',
-    width: '100%',
-    flex: 1,
   },
   
-  scrollContainer: { 
+  continueButtonContainer: {
     width: '100%',
-    flex: 1,
-    marginVertical: 10,
-  },
-  
-  scrollContent: { 
-    paddingVertical: 5,
     alignItems: 'center',
-  },
-  
-  cardContainer: { 
-    width: '100%', 
-    alignItems: 'center', 
-    marginVertical: 5 
-  },
-  
-  cardContent: { 
-    backgroundColor: 'rgba(255,255,255,0.9)', 
-    borderRadius: 10, 
-    padding: 10, 
-    width: '100%' 
-  },
-  
-  cardText: { 
-    fontFamily: 'System',
-    fontSize: 16, 
-    color: '#333', 
-    marginVertical: 2,
-    textAlign: 'center',
+    paddingVertical: 15,
+    backgroundColor: '#252525',
+    borderTopWidth: 1,
+    borderTopColor: '#333333',
   },
   
   popupButton: { 
-    backgroundColor: 'rgba(0,0,0,0.2)', 
-    borderRadius: 10, 
-    paddingVertical: 10, 
+    backgroundColor: '#58CC02',
+    borderRadius: 16, 
+    paddingVertical: 14, 
     paddingHorizontal: 20, 
-    marginTop: 15, 
-    width: '100%'
+    width: '90%',
+    shadowColor: '#45a100',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 3,
   },
   
   popupButtonText: { 
-    fontFamily: 'PressStart2P', 
+    fontFamily: 'System', 
     fontSize: 18, 
+    fontWeight: 'bold',
     color: 'white', 
     textAlign: 'center' 
   },
   
-  popupTitle: { 
-    fontFamily: 'PressStart2P', 
-    fontSize: 20, 
-    color: 'white', 
-    textAlign: 'center', 
-    marginBottom: 15 
+  imageContainer: {
+    width: '90%',
+    height: 180,
+    marginBottom: 15,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#333333',
+    position: 'relative',
   },
   
-  // Evaluation screen styles
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  
+  wordOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    padding: 15,
+  },
+  
+  wordInfoTextContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  frontText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  
+  phoneticText: {
+    fontSize: 20,
+    fontStyle: 'italic',
+    color: '#CCCCCC',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  
+  backText: {
+    fontSize: 22,
+    color: '#FFD700',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  
+  wordAudioButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#58CC02',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  
+  wordAudioIcon: {
+    fontSize: 20,
+    color: 'white',
+  },
+  
+  examplesScrollView: {
+    width: '100%',
+    flex: 1,
+  },
+  
+  examplesScrollContent: {
+    alignItems: 'center',
+    paddingBottom: 70,
+  },
+  
+  examplesOuterWrapper: {
+    width: '90%',
+    marginHorizontal: 20,
+  },
+  
+  examplesWrapper: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  
+  exampleContainer: {
+    backgroundColor: '#333333',
+    borderRadius: 15,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#444444',
+    width: '90%',
+    position: 'relative',
+    marginHorizontal: 10,
+  },
+  
+  sideNavigationArrow: {
+    width: 40,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#333333',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 2,
+    zIndex: 10,
+  },
+  
+  leftArrow: {
+    marginRight: 5,
+  },
+  
+  rightArrow: {
+    marginLeft: 5,
+  },
+  
+  sideArrowText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#58CC02',
+  },
+  
+  arrowDisabled: {
+    backgroundColor: '#222222',
+    opacity: 0.5,
+  },
+  
+  exampleCountIndicator: {
+    position: 'absolute',
+    right: 10,
+    bottom: -10,
+    backgroundColor: '#333333',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444444',
+  },
+  
+  exampleCountText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#CCCCCC',
+  },
+  
+  exampleSection: {
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444444',
+  },
+  
+  exampleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  
+  exampleSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#CCCCCC',
+    marginBottom: 4,
+  },
+  
+  pronunciationButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#58CC02',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  
+  pronunciationIcon: {
+    fontSize: 16,
+    color: 'white',
+  },
+  
+  exampleContentScroll: {
+    maxHeight: 100,
+  },
+  
+  exampleQuestion: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#CCCCCC',
+    marginBottom: 5,
+  },
+  
+  exampleAnswer: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#CCCCCC',
+    marginBottom: 5,
+  },
+  
+  examplePhonetic: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#999999',
+    marginBottom: 5,
+  },
+  
+  answerSection: {
+    backgroundColor: 'rgba(88, 204, 2, 0.1)',
+    borderRadius: 8,
+    marginBottom: 10,
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    borderBottomWidth: 0,
+  },
+  
+  popupHeader: {
+    width: '100%',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333333',
+  },
+  
+  correctHeader: {
+    backgroundColor: '#2E5B01',
+  },
+  
+  incorrectHeader: {
+    backgroundColor: '#5B0000',
+  },
+  
+  popupTitle: { 
+    fontFamily: 'System', 
+    fontSize: 22, 
+    fontWeight: 'bold',
+    color: '#58CC02',
+    textAlign: 'center', 
+    marginTop: 15,
+    marginBottom: 15,
+    width: '100%',
+    paddingHorizontal: 15,
+  },
+  
+  incorrectTitle: {
+    color: '#FFFFFF',
+  },
+  
+  scrollContainer: {
+    width: '100%',
+    flex: 1
+  },
+  
+  scrollContent: {
+    alignItems: 'center',
+    paddingBottom: 70
+  },
+  
+  cardContainer: {
+    width: '90%',
+    backgroundColor: '#333333',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 15,
+  },
+  
+  cardContent: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  
+  cardText: {
+    marginBottom: 5,
+    color: '#CCCCCC',
+  },
+  
   evaluationHeader: { 
     alignItems: 'center', 
     padding: 20, 
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 15,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 20,
     margin: 10,
-    marginTop: 50 
+    marginTop: 50,
   },
   
   evaluationTitle: { 
-    fontFamily: 'PressStart2P', 
+    fontFamily: 'System', 
     fontSize: 24, 
-    color: 'white', 
+    fontWeight: 'bold',
+    color: '#CCCCCC',
     marginBottom: 10 
   },
   
   evaluationSubtitle: { 
-    fontFamily: 'PressStart2P', 
+    fontFamily: 'System', 
     fontSize: 18, 
-    color: '#FFD700' 
+    fontWeight: 'bold',
+    color: '#FFB100'
   },
   
   evaluationScroll: { 
-    flex: 1 
+    flex: 1,
+    backgroundColor: '#121212',
   },
   
   evaluationContent: { 
@@ -1028,33 +1353,46 @@ const styles = StyleSheet.create({
   },
   
   evaluationSectionTitle: { 
-    fontFamily: 'PressStart2P', 
+    fontFamily: 'System', 
     fontSize: 18, 
-    color: 'white', 
-    backgroundColor: 'rgba(0,0,0,0.6)', 
-    padding: 10, 
-    borderRadius: 10, 
-    marginVertical: 10 
+    fontWeight: 'bold',
+    color: '#CCCCCC',
+    backgroundColor: '#252525',
+    padding: 15, 
+    borderRadius: 16, 
+    marginVertical: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 2,
   },
   
   cardResultContainer: { 
-    backgroundColor: 'rgba(255,255,255,0.9)', 
-    borderRadius: 15, 
+    backgroundColor: '#252525',
+    borderRadius: 16, 
     padding: 15, 
-    marginBottom: 15 
+    marginBottom: 15,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#333333'
   },
   
   cardResultTitle: { 
-    fontSize: 16, 
+    fontSize: 18, 
     fontWeight: 'bold',
-    color: '#333', 
+    color: '#CCCCCC',
     marginBottom: 10 
   },
   
   cardResultContent: { 
-    backgroundColor: '#f5f5f5', 
-    borderRadius: 10, 
-    padding: 10 
+    backgroundColor: '#333333',
+    borderRadius: 16, 
+    padding: 12 
   },
   
   cardResultRow: { 
@@ -1064,33 +1402,91 @@ const styles = StyleSheet.create({
   },
   
   cardResultLabel: { 
-    fontSize: 12, 
-    color: '#666' 
+    fontSize: 14, 
+    color: '#999999',
+    fontWeight: '600'
   },
   
   cardResultValue: { 
-    fontSize: 12, 
-    color: '#333' 
+    fontSize: 14, 
+    color: '#CCCCCC',
+    fontWeight: '500'
   },
   
   evaluationButtons: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
-    padding: 20 
+    padding: 20,
+    backgroundColor: '#1A1A1A',
   },
   
   evaluationButton: { 
-    backgroundColor: '#FF8C00', 
-    borderRadius: 20, 
-    padding: 15, 
+    backgroundColor: '#58CC02',
+    borderRadius: 16, 
+    padding: 16, 
     flex: 1, 
-    marginHorizontal: 5 
+    marginHorizontal: 5,
+    shadowColor: '#45a100',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 4,
   },
   
   evaluationButtonText: { 
-    fontFamily: 'PressStart2P', 
-    fontSize: 14, 
+    fontFamily: 'System', 
+    fontSize: 16, 
+    fontWeight: 'bold',
     color: 'white', 
     textAlign: 'center' 
+  },
+  
+  chestViewContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 15,
+    padding: 20,
+    marginTop: 10,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#333333',
+  },
+  
+  chestRewardText: {
+    fontFamily: 'PressStart2P',
+    fontSize: 20,
+    color: '#FFD700',
+    marginBottom: 15,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 5,
+  },
+  
+  chestImageContainer: {
+    width: 80,
+    height: 80,
+    overflow: 'hidden',
+    borderRadius: 10,
+    backgroundColor: '#3A3000',
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    marginVertical: 15,
+  },
+  
+  chestInstructionText: {
+    fontFamily: 'PressStart2P',
+    fontSize: 14,
+    color: '#CCCCCC',
+    marginTop: 10,
+    textAlign: 'center',
   },
 });

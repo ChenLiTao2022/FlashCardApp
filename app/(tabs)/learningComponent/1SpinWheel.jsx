@@ -124,20 +124,20 @@ export default function SpinWheel({ dueCards, onAnswer, showResult }) {
       setOptions(generateOptions(card));
       setShowQuiz(true);
     } else if (index === 3) {
-      // Money segment
-      setMessageText("Money! 🎉 You earned 5 gold!");
+      // Money segment - higher value reward
+      setMessageText("Money! 🎉 You earned 10 gold!");
       setShowMessage(true);
       setTimeout(() => {
         setShowMessage(false);
-        onAnswer?.(true, "🎉 You earned 5 gold!");
+        onAnswer?.(true, "🎉 You earned 10 gold!");
       }, 1000);
     } else {
-      // Ad segment
-      setMessageText("ADs for now 📺");
+      // Ad segment - also correct but lower value
+      setMessageText("Ad Bonus! 📺 You earned 5 gold!");
       setShowMessage(true);
       setTimeout(() => {
         setShowMessage(false);
-        onAnswer?.(false, "📺 Watch an ad to continue!");
+        onAnswer?.(true, "📺 You earned 5 gold!");
       }, 1000);
     }
   };

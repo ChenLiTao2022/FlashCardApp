@@ -1,0 +1,5369 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  ScrollView,
+  Animated,
+  Alert,
+  ImageBackground,
+  Pressable,
+  Platform,
+  ActivityIndicator
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter, useNavigation } from 'expo-router';
+import { 
+  loadStats, 
+  saveStats, 
+  loadDailyStreak, 
+  saveDailyStreak,
+  loadOwnedFood,
+  saveOwnedFood,
+  loadPurchasedFoods,
+  savePurchasedFoods,
+  loadOwnedFurniture,
+  saveOwnedFurniture,
+  loadFurniturePlacement,
+  saveFurniturePlacement,
+  loadFoodData,
+  saveFoodData,
+  loadMoney,
+  saveMoney,
+  resetStorage
+} from '../helpers/StorageHelper';
+import { changeAnimation, playAnimationOnce, areAnimationsLoaded, setAnimationsLoaded, saveAnimationLoadedState, checkAnimationLoadedState } from '../helpers/CatAnimationHelper';
+
+const { width, height } = Dimensions.get('window');
+
+// ----------------------------
+// Dynamic Room Settings
+// ----------------------------
+export const screenWidth = width;
+export const screenHeight = height;
+export const ROOM_BG_SIZE = Math.min(screenWidth * 1, screenHeight * 1); // Responsive room size
+export const ROOM_ROWS = 32;
+export const ROOM_COLS = 32;
+export const ROOM_CELL_SIZE = ROOM_BG_SIZE / ROOM_ROWS;
+
+// ----------------------------
+// Animation Settings for Cat Sprite
+// ----------------------------
+export const frameWidth = 64 * 1.5;
+export const frameHeight = 64 * 1.5;
+export const animationInterval = 150;
+
+// ----------------------------
+// Cat Animation Library
+// ----------------------------
+export const catAnimations = {
+  Attack: { 
+    frames: 7, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Attack.png') 
+  },
+  Box1: { 
+    frames: 12, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Box1.png') 
+  },
+  Box2: { 
+    frames: 10, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Box2.png') 
+  },
+  Box3: { 
+    frames: 12, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Box3.png') 
+  },
+  Chilling: { 
+    frames: 8, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Chilling.png') 
+  },
+  Crying: { 
+    frames: 4, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Crying.png') 
+  },
+  Dance: { 
+    frames: 4, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Dance.png') 
+  },
+  Dead: { 
+    frames: 1, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Dead.png') 
+  },
+  Dead2: { 
+    frames: 5, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Dead2.png') 
+  },
+  Excited: { 
+    frames: 3, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Excited.png') 
+  },
+  Happy: { 
+    frames: 10, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Happy.png') 
+  },
+  Hurt: { 
+    frames: 8, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Hurt.png') 
+  },
+  Idle: { 
+    frames: 6, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Idle.png') 
+  },
+  Jump: { 
+    frames: 12, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Jump.png') 
+  },
+  Running: { 
+    frames: 6, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Running.png') 
+  },
+  Sleeping: { 
+    frames: 4, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Sleeping.png') 
+  },
+  Surprised: { 
+    frames: 4, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Surprised.png') 
+  },
+  Tickle: { 
+    frames: 4, 
+    source: require('../asset/RetroCatsPaid/Cats/Sprites/Tickle.png') 
+  }
+};
+
+// Get an array of animation names for random selection
+export const animationNames = Object.keys(catAnimations);
+
+// ----------------------------
+// Cat Size Option
+// ----------------------------
+export const CAT_SIZE = 0.5;
+
+// ----------------------------
+// Other Constants & Helper Functions
+// ----------------------------
+export const CELL_SIZE = 32;
+export const SHEET_SIZE = 1024;
+export const ROOM_SCALE = 0.6;
+
+export function createSpriteFromGrid(startRow, startCol, rowSpan, colSpan) {
+  return {
+    x: startCol * CELL_SIZE,
+    y: startRow * CELL_SIZE,
+    width: colSpan * CELL_SIZE,
+    height: rowSpan * CELL_SIZE,
+  };
+}
+
+// ----------------------------
+// Decoration Library for Furniture Items
+// ----------------------------
+export const decorationLibrary = {
+  // Windows
+  whiteWindow: createSpriteFromGrid(0, 0, 3, 3),
+  brownWindow: createSpriteFromGrid(0, 3, 3, 3),
+  greyWindow: createSpriteFromGrid(3, 0, 3, 3),
+  goldenBrownWindow: createSpriteFromGrid(3, 3, 3, 3),
+  beigeCurtainWindow: createSpriteFromGrid(7, 0, 2, 2),
+  pinkStoneWindow: createSpriteFromGrid(7, 2, 2, 2),
+
+  // Small Potted Plants
+  lightPinkPottedPlant: createSpriteFromGrid(6, 4, 1, 1),
+  greyPottedPlant: createSpriteFromGrid(6, 5, 1, 1),
+  pinkPottedPlant: createSpriteFromGrid(7, 4, 1, 1),
+  bluePottedPlant: createSpriteFromGrid(7, 5, 1, 1),
+  yellowPottedPlant: createSpriteFromGrid(7, 4, 1, 1),
+  darkBluePottedPlant: createSpriteFromGrid(7, 5, 1, 1),
+
+  // Potted Trees
+  brownPottedTree: createSpriteFromGrid(9, 4, 4, 2),
+  darkBluePottedTree: createSpriteFromGrid(13, 4, 4, 2),
+  pinkPottedTree: createSpriteFromGrid(17, 4, 4, 2),
+  lightBluePottedTree: createSpriteFromGrid(21, 4, 4, 2),
+
+  // Shelves
+  pinkShelf: createSpriteFromGrid(9, 0, 4, 4),
+  blueShelf: createSpriteFromGrid(13, 0, 4, 4),
+  greenShelf: createSpriteFromGrid(17, 0, 4, 4),
+  purpleShelf: createSpriteFromGrid(21, 0, 4, 4),
+  yellowShelf: createSpriteFromGrid(25, 0, 4, 4),
+
+  // Cat Trees (Scratching Posts)
+  beigeCatTree: createSpriteFromGrid(0, 6, 4, 2),
+  oliveCatTree: createSpriteFromGrid(0, 9, 4, 2),
+  blueCatTree: createSpriteFromGrid(0, 12, 4, 2),
+  whiteCatTreeBase: createSpriteFromGrid(13, 6, 3, 2),
+  brownCatTreeBase: createSpriteFromGrid(16, 6, 3, 2),
+
+  // Pet Beds
+  blueBed: createSpriteFromGrid(4, 6, 3, 4),
+  greyBed: createSpriteFromGrid(4, 10, 3, 4),
+  pinkBed: createSpriteFromGrid(7, 6, 3, 4),
+  greenBed: createSpriteFromGrid(7, 10, 3, 4),
+  purpleBed: createSpriteFromGrid(10, 6, 3, 4),
+  tealBed: createSpriteFromGrid(10, 10, 3, 4),
+
+  // Food Bowls & Cans
+  blueKibbleBowl: createSpriteFromGrid(13, 8, 2, 2),
+  beigeKibbleBowl: createSpriteFromGrid(13, 10, 2, 2),
+  purpleKibbleBowl: createSpriteFromGrid(15, 8, 2, 2),
+  whiteKibbleBowl: createSpriteFromGrid(15, 10, 2, 2),
+  redKibbleBowl: createSpriteFromGrid(17, 8, 2, 2),
+  greenKibbleBowl: createSpriteFromGrid(17, 10, 2, 2),
+  redFoodCan: createSpriteFromGrid(19, 17, 1, 1),
+  brownFoodCan: createSpriteFromGrid(19, 18, 1, 1),
+  greyFoodCan: createSpriteFromGrid(19, 19, 1, 1),
+  pinkFoodCan: createSpriteFromGrid(19, 20, 1, 1),
+  purpleFoodCan: createSpriteFromGrid(20, 17, 1, 1),
+  greenFoodCan: createSpriteFromGrid(20, 18, 1, 1),
+  tealFoodCan: createSpriteFromGrid(20, 19, 1, 1),
+  greenFoodCan2: createSpriteFromGrid(20, 20, 1, 1),
+
+  // Water Bowls
+  blueWaterBowl: createSpriteFromGrid(13, 12, 2, 2),
+  beigeWaterBowl: createSpriteFromGrid(13, 14, 2, 2),
+  purpleWaterBowl: createSpriteFromGrid(15, 12, 2, 2),
+  whiteWaterBowl: createSpriteFromGrid(15, 14, 2, 2),
+  redWaterBowl: createSpriteFromGrid(17, 12, 2, 2),
+  greenWaterBowl: createSpriteFromGrid(17, 14, 2, 2),
+
+  // Cat Toys
+  rainbowCubeToy: createSpriteFromGrid(19, 6, 1, 1),
+  rainbowCubeToy2: createSpriteFromGrid(19, 7, 1, 1),
+  tealDumbbellToy: createSpriteFromGrid(19, 12, 1, 1),
+  brownDumbbellToy: createSpriteFromGrid(19, 13, 1, 1),
+  lavenderDumbbellToy: createSpriteFromGrid(20, 12, 1, 1),
+  maroonDumbbellToy: createSpriteFromGrid(20, 13, 1, 1),
+  darkBlueDumbbellToy: createSpriteFromGrid(21, 12, 1, 1),
+  brickRedDumbbellToy: createSpriteFromGrid(21, 13, 1, 1),
+  lightBlueDumbbellToy: createSpriteFromGrid(22, 12, 1, 1),
+  orangeDumbbellToy: createSpriteFromGrid(22, 13, 1, 1),
+  skyBlueDumbbellToy: createSpriteFromGrid(23, 12, 1, 1),
+  greenDumbbellToy: createSpriteFromGrid(23, 13, 1, 1),
+
+  // Cat Toys – Fish Plushies
+  fishPlushie1: createSpriteFromGrid(21, 6, 2, 2),
+  fishPlushie2: createSpriteFromGrid(23, 6, 2, 2),
+  fishPlushie3: createSpriteFromGrid(25, 6, 2, 2),
+  tealFishPlushie: createSpriteFromGrid(27, 6, 2, 2),
+  blueFishPlushie: createSpriteFromGrid(25, 4, 2, 2),
+  redFishPlushie: createSpriteFromGrid(27, 4, 2, 2),
+
+  // Cat Toys – Yarn Balls
+  greenYarnBallLarge: createSpriteFromGrid(0, 14, 1, 1),
+  greenYarnBallSmall: createSpriteFromGrid(0, 15, 1, 1),
+  blueYarnBallLarge: createSpriteFromGrid(0, 16, 1, 1),
+  blueYarnBallSmall: createSpriteFromGrid(0, 17, 1, 1),
+  lightBlueYarnBallLarge: createSpriteFromGrid(1, 14, 1, 1),
+  lightBlueYarnBallSmall: createSpriteFromGrid(1, 15, 1, 1),
+  creamYarnBallLarge: createSpriteFromGrid(1, 16, 1, 1),
+  creamYarnBallSmall: createSpriteFromGrid(1, 17, 1, 1),
+  redYarnBallLarge: createSpriteFromGrid(2, 14, 1, 1),
+  redYarnBallSmall: createSpriteFromGrid(2, 15, 1, 1),
+  greyYarnBallLarge: createSpriteFromGrid(2, 16, 1, 1),
+  greyYarnBallSmall: createSpriteFromGrid(2, 17, 1, 1),
+  tealYarnBallLarge: createSpriteFromGrid(3, 14, 1, 1),
+  tealYarnBallSmall: createSpriteFromGrid(3, 15, 1, 1),
+  indigoYarnBallLarge: createSpriteFromGrid(3, 16, 1, 1),
+  indigoYarnBallSmall: createSpriteFromGrid(3, 17, 1, 1),
+  purpleYarnBallLarge: createSpriteFromGrid(4, 14, 1, 1),
+  purpleYarnBallSmall: createSpriteFromGrid(4, 15, 1, 1),
+  oliveYarnBallLarge: createSpriteFromGrid(4, 16, 1, 1),
+  oliveYarnBallSmall: createSpriteFromGrid(4, 17, 1, 1),
+  goldenBrownYarnBallLarge: createSpriteFromGrid(5, 14, 1, 1),
+  goldenBrownYarnBallSmall: createSpriteFromGrid(5, 15, 1, 1),
+  violetYarnBallLarge: createSpriteFromGrid(5, 16, 1, 1),
+  violetYarnBallSmall: createSpriteFromGrid(5, 17, 1, 1),
+
+  // Wall Art – Cat Posters
+  creamCatPoster: createSpriteFromGrid(6, 14, 2, 1),
+  blueCatPoster: createSpriteFromGrid(6, 15, 2, 1),
+  brownCatPoster: createSpriteFromGrid(6, 16, 2, 1),
+  cyanCatPoster: createSpriteFromGrid(8, 14, 2, 1),
+  greyCatPoster: createSpriteFromGrid(8, 15, 2, 1),
+  purpleCatPoster: createSpriteFromGrid(8, 16, 2, 1),
+
+  // Wall Art – Heart Frames
+  brownHeartFrame: createSpriteFromGrid(10, 14, 1, 1),
+  greyHeartFrame: createSpriteFromGrid(10, 15, 1, 1),
+  navyHeartFrame: createSpriteFromGrid(10, 16, 1, 1),
+  oliveHeartFrame: createSpriteFromGrid(11, 14, 1, 1),
+  whiteHeartFrame: createSpriteFromGrid(11, 15, 1, 1),
+  purpleHeartFrame: createSpriteFromGrid(11, 16, 1, 1),
+  pinkHeartFrame: createSpriteFromGrid(12, 14, 1, 1),
+  yellowHeartFrame: createSpriteFromGrid(12, 15, 1, 1),
+  greenHeartFrame: createSpriteFromGrid(12, 16, 1, 1),
+
+  // Wall Art – Framed Plant Art
+  framedPlantArt: createSpriteFromGrid(6, 22, 3, 2),
+
+  // Climbing Towers
+  beigeClimbingTowerWithStairs: createSpriteFromGrid(7, 17, 5, 4),
+  beigeTallClimbingTowerWithStairs: createSpriteFromGrid(12, 17, 5, 4),
+
+  // Bones & Mouse Toy
+  smallBone: createSpriteFromGrid(19, 16, 1, 1),
+  largeBone: createSpriteFromGrid(20, 16, 1, 1),
+  mouseToy: createSpriteFromGrid(19, 14, 2, 2),
+
+  // Cat Food Bags
+  smallCatFoodBag: createSpriteFromGrid(17, 16, 2, 2),
+  largeCatFoodBag: createSpriteFromGrid(17, 18, 2, 2),
+
+  // Cat Towers
+  whiteCatTower: createSpriteFromGrid(0, 18, 6, 3),
+  blueCatTower: createSpriteFromGrid(0, 21, 6, 3),
+  pinkCatTower: createSpriteFromGrid(0, 24, 6, 3),
+
+  // Windows with Trims
+  purpleTrimWindow: createSpriteFromGrid(0, 27, 4, 2),
+  blackTrimWindow: createSpriteFromGrid(0, 29, 4, 2),
+  greenTrimWindow: createSpriteFromGrid(4, 27, 4, 2),
+  whiteTrimWindow: createSpriteFromGrid(4, 29, 4, 2),
+
+  // Windows with Curtains
+  whiteCurtainWindow: createSpriteFromGrid(9, 21, 5, 3),
+  redCurtainWindow: createSpriteFromGrid(9, 24, 5, 3),
+  blueCurtainWindow: createSpriteFromGrid(9, 27, 5, 3),
+
+  // Furniture – Cat Stools
+  creamCatStool: createSpriteFromGrid(19, 21, 2, 2),
+  greyCatStool: createSpriteFromGrid(19, 23, 2, 2),
+  redCatStool: createSpriteFromGrid(19, 25, 2, 2),
+  blueCatStool: createSpriteFromGrid(19, 27, 2, 2),
+  purpleCatStool: createSpriteFromGrid(19, 29, 2, 2),
+
+  // Cat Furniture – Posts
+  yellowCatPost: createSpriteFromGrid(21, 20, 3, 2),
+  greenCatPost: createSpriteFromGrid(21, 22, 3, 2),
+  pinkCatPost: createSpriteFromGrid(21, 24, 3, 2),
+  tealCatPost: createSpriteFromGrid(21, 26, 3, 2),
+  whiteCatPost: createSpriteFromGrid(21, 28, 3, 2),
+  beigeCatPost: createSpriteFromGrid(21, 30, 3, 2),
+
+  // Cat Furniture – Round Towers
+  brownRoundCatTower: createSpriteFromGrid(15, 21, 3, 2),
+  yellowRoundCatTower: createSpriteFromGrid(15, 23, 3, 2),
+  blueRoundCatTower: createSpriteFromGrid(15, 25, 3, 2),
+  redRoundCatTower: createSpriteFromGrid(15, 27, 3, 2),
+  mintRoundCatTower: createSpriteFromGrid(15, 29, 3, 2),
+};
+
+// ----------------------------
+// Sprite Library
+// ----------------------------
+export const spriteLibrary = {
+  catFood: createSpriteFromGrid(17, 18, 2, 2),
+};
+
+// ----------------------------
+// RoomDecorationItem Component (Tap-to-select)
+// ----------------------------
+export function RoomDecorationItem({ id, itemKey, roomRow, roomCol, isSelected, onSelect, frameIndex, currentAnimation, direction = 1, onCatTap }) {
+  if (itemKey === 'catSprite') {
+    const animation = catAnimations[currentAnimation];
+    // Round position values for React Native view
+    const left = Math.floor(roomCol * ROOM_CELL_SIZE);
+    const top = Math.floor(roomRow * ROOM_CELL_SIZE);
+    
+    // Add a reference to track the previous animation
+    const prevAnimationRef = useRef(currentAnimation);
+    const directionRef = useRef(direction);
+    
+    // Keep track of animation changes but don't fade
+    useEffect(() => {
+      if (prevAnimationRef.current !== currentAnimation) {
+        // Just update the reference without any animation
+        prevAnimationRef.current = currentAnimation;
+      }
+    }, [currentAnimation]);
+    
+    // Keep track of direction changes
+    useEffect(() => {
+      directionRef.current = direction;
+    }, [direction]);
+    
+    // Determine the effective direction based on:
+    // 1. The explicit direction prop (which overrides defaults)
+    // 2. The default direction of the current animation (if no explicit direction)
+    const effectiveDirection = direction;
+    
+    // Scale up the Running animation by 10%
+    const isRunningAnimation = currentAnimation === 'Running';
+    const scaleFactor = isRunningAnimation ? 1.1 : 1.0; // 10% larger for running
+    
+    // Calculate adjusted sizes for the animation
+    const adjustedWidth = frameWidth * CAT_SIZE * scaleFactor;
+    const adjustedHeight = frameHeight * CAT_SIZE * scaleFactor;
+    
+    // Adjust position to center the larger animation
+    const adjustedLeft = isRunningAnimation ? left - (adjustedWidth - frameWidth * CAT_SIZE) / 2 : left;
+    const adjustedTop = isRunningAnimation ? top - (adjustedHeight - frameHeight * CAT_SIZE) / 2 : top;
+    
+    // Always use direction for flipping, regardless of animation
+    return (
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={() => {
+          if (onCatTap && id === 'cat') {
+            onCatTap();
+          } else if (!isSelected && !onSelect(null)) {
+            onSelect(id);
+          }
+        }}
+        pointerEvents={isSelected ? 'none' : 'auto'}
+        style={{
+          position: 'absolute',
+          left: adjustedLeft,
+          top: adjustedTop,
+          width: adjustedWidth,
+          height: adjustedHeight,
+          opacity: isSelected ? 0.5 : 1,
+          overflow: 'hidden',
+          zIndex: Math.floor(roomRow) + 15, // Higher z-index to ensure cat appears above boundary box
+          transform: [{ scaleX: effectiveDirection }] // Flip based on direction
+        }}
+      >
+        <Image
+          source={animation.source}
+          style={{
+            position: 'absolute',
+            left: -Math.floor(frameIndex * frameWidth * CAT_SIZE * scaleFactor),
+            top: 0,
+            width: frameWidth * animation.frames * CAT_SIZE * scaleFactor,
+            height: frameHeight * CAT_SIZE * scaleFactor,
+            resizeMode: 'contain',
+          }}
+        />
+      </TouchableOpacity>
+    );
+  } else {
+    const { x, y, width, height } = decorationLibrary[itemKey];
+    // Round position values for React Native view
+    const left = Math.floor(roomCol * ROOM_CELL_SIZE);
+    const top = Math.floor(roomRow * ROOM_CELL_SIZE);
+    
+    return (
+      <View
+        style={{
+          position: 'absolute',
+          left: left,
+          top: top,
+          width: width * ROOM_SCALE,
+          height: height * ROOM_SCALE,
+          opacity: isSelected ? 0.5 : 1,
+          overflow: 'hidden',
+          zIndex: Math.floor(roomRow + 1), // Z-index based on y-coordinate, +1 to prioritize furniture over cat
+          // Only allow touch events when not selected
+          pointerEvents: isSelected ? 'none' : 'auto',
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {
+            if (!isSelected) {
+              onSelect(id);
+            }
+          }}
+          style={{ width: '100%', height: '100%' }}
+      >
+        <Image
+          source={require('../asset/RetroCatsPaid/CatItems/Decorations/CatRoomDecorations.png')}
+          style={{
+            position: 'absolute',
+            top: -y * ROOM_SCALE,
+            left: -x * ROOM_SCALE,
+            width: SHEET_SIZE * ROOM_SCALE,
+            height: SHEET_SIZE * ROOM_SCALE,
+            resizeMode: 'contain',
+          }}
+        />
+      </TouchableOpacity>
+      </View>
+    );
+  }
+}
+
+// ----------------------------
+// Chest Slot Components
+// ----------------------------
+export const CHEST_FRAME_WIDTH = 48; // Original frame width on the sprite sheet
+export const CHEST_FRAME_HEIGHT = 32; // Original frame height on the sprite sheet
+export const CHEST_FRAMES_PER_ROW = 5;
+export const CHEST_ANIMATION_INTERVAL = 150;
+
+// Visible portion of the frame (reduced to show only the actual chest)
+export const CHEST_VISIBLE_WIDTH = 30; // Updated from 26px to 30px as requested
+export const CHEST_VISIBLE_HEIGHT = 22; // 32px - 10px from top = 22px
+
+// ----------------------------
+// Chest Unlock Confirmation Component
+// ----------------------------
+export function ChestUnlockConfirmation({ chestIndex, chestType, onConfirm, onCancel }) {
+  // Frame dimensions
+  const frameWidth = CHEST_VISIBLE_WIDTH;
+  const frameHeight = CHEST_VISIBLE_HEIGHT;
+  
+  // Same chest positions as in ChestSlot
+  const chestPositions = [
+    { x: 0, y: 10 },    // First chest
+    { x: 0, y: 74 },    // Second chest
+    { x: 0, y: 138 },   // Third chest
+    { x: 0, y: 202 }    // Fourth chest
+  ];
+  
+  // Make sure the index is valid
+  const validChestType = Math.min(Math.max(chestType || 0, 0), 3);
+  const { x, y } = chestPositions[validChestType];
+  
+  return (
+    <View style={styles.unlockConfirmationOverlay}>
+      <View style={styles.unlockConfirmationContainer}>
+        <Text style={styles.unlockConfirmationTitle}>Unlock Chest?</Text>
+        
+        <View style={styles.unlockChestImageContainer}>
+          <View style={{
+            width: frameWidth,
+            height: frameHeight,
+            transform: [{ scale: 2.5 }],
+            overflow: 'hidden',
+          }}>
+            <Image
+              source={require('../asset/Chests.png')}
+              style={{
+                position: 'absolute',
+                top: -y,
+                left: -x,
+                width: 240,
+                height: 256,
+              }}
+            />
+          </View>
+        </View>
+        
+
+        
+        <View style={styles.unlockButtonsContainer}>
+          <TouchableOpacity style={styles.unlockButton} onPress={() => onConfirm(chestIndex)}>
+            <Text style={styles.unlockButtonText}>Unlock</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.cancelUnlockButton} onPress={onCancel}>
+            <Text style={styles.unlockButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function ChestSlot({ chestIndex = 1, onChestClick, timeRemaining, chestType, unlockable = false }) {
+  // Frame dimensions from sprite sheet - but just use the visible portion
+  const frameWidth = CHEST_VISIBLE_WIDTH;
+  const frameHeight = CHEST_VISIBLE_HEIGHT;
+  
+  // Each chest takes up 2 rows, first frames are at:
+  // First chest: 0,10
+  // Second chest: 0,74
+  // Third chest: 0,138
+  // Fourth chest: 0,202
+  const chestPositions = [
+    { x: 0, y: 10 },    // First chest
+    { x: 0, y: 74 },    // Second chest
+    { x: 0, y: 138 },   // Third chest
+    { x: 0, y: 202 }    // Fourth chest
+  ];
+  
+  // Use the chest type if provided, otherwise use the chest index
+  const displayChestIndex = chestType !== undefined ? chestType : chestIndex;
+  
+  // Use a different chest based on the provided index (1-3)
+  // Make sure the index is valid (between 0-3)
+  const validIndex = Math.min(Math.max(displayChestIndex, 0), 3);
+  const { x, y } = chestPositions[validIndex];
+  
+  // Check if the chest is truly empty (null timeRemaining and not unlockable)
+  const isEmpty = timeRemaining === null && !unlockable;
+  
+  // Determine if the chest is ready to open (timer at 0)
+  const isReady = timeRemaining === 0;
+  
+  // Get the state of the chest (unlockable, locked, or ready)
+  const chestState = unlockable ? 'unlockable' : (isReady ? 'ready' : 'locked');
+  
+  // Background color based on timer - gold when ready, transparent when not ready
+  const backgroundColor = isReady ? '#FFD700' : 
+                          unlockable ? '#8A2BE2' : // Purple for unlockable
+                          'rgba(0,0,0,0.5)';      // Dark for locked
+  
+  // Format time if needed for minutes
+  const formattedTime = () => {
+    if (timeRemaining === 0) return 'Ready!';
+    if (unlockable) return 'Tap to Start';
+    if (timeRemaining < 60) return `${timeRemaining}s`;
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+  };
+  
+  return (
+    <TouchableOpacity 
+      style={[styles.chestSlotContainer, { width: 70, height: 70, backgroundColor }]}
+      onPress={() => onChestClick && onChestClick(chestIndex, chestState)}
+    >
+      <View style={{ 
+        width: 70, 
+        height: 70, 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        overflow: 'hidden',
+        borderRadius: 10,
+      }}>
+        {/* Show chest if not empty OR unlockable */}
+        {!isEmpty && (
+          <View style={{
+            width: frameWidth,
+            height: frameHeight,
+            transform: [{ scale: 1.8 }],
+            overflow: 'hidden',
+            marginTop: -3, // Adjust vertical position by moving up 3 pixels
+          }}>
+            <Image
+              source={require('../asset/Chests.png')}
+              style={{
+                position: 'absolute',
+                top: -y,
+                left: -x,
+                width: 240,
+                height: 256,
+              }}
+            />
+          </View>
+        )}
+        
+        {/* Timer text or status label */}
+        {!isEmpty && (
+          <Text style={[
+            styles.timerText, 
+            isReady ? styles.readyTimerText : 
+            unlockable ? styles.unlockableTimerText : {}
+          ]}>
+            {formattedTime()}
+          </Text>
+        )}
+        
+        {/* Show empty text when chest is empty */}
+        {isEmpty && (
+          <Text style={styles.emptyChestText}>Empty</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export const STATS_COLORS = {
+  hunger: '#FFA600',
+  clean: '#66C7F4',
+  happy: '#4CAF50',
+};
+
+// ----------------------------
+// Furniture Prices
+// ----------------------------
+export const furniturePrices = {
+  // Windows
+  whiteWindow: 120,
+  brownWindow: 120,
+  greyWindow: 120,
+  goldenBrownWindow: 150,
+  beigeCurtainWindow: 100,
+  pinkStoneWindow: 100,
+
+  // Small Potted Plants
+  lightPinkPottedPlant: 60,
+  greyPottedPlant: 60,
+  pinkPottedPlant: 60,
+  bluePottedPlant: 60,
+  yellowPottedPlant: 60,
+  darkBluePottedPlant: 60,
+
+  // Potted Trees
+  brownPottedTree: 150,
+  darkBluePottedTree: 150,
+  pinkPottedTree: 150,
+  lightBluePottedTree: 150,
+
+  // Shelves
+  pinkShelf: 200,
+  blueShelf: 200,
+  greenShelf: 200,
+  purpleShelf: 200,
+  yellowShelf: 200,
+
+  // Cat Trees (Scratching Posts)
+  beigeCatTree: 300,
+  oliveCatTree: 300,
+  blueCatTree: 300,
+  whiteCatTreeBase: 250,
+  brownCatTreeBase: 250,
+
+  // Pet Beds
+  blueBed: 180,
+  greyBed: 180,
+  pinkBed: 180,
+  greenBed: 180,
+  purpleBed: 180,
+  tealBed: 180,
+
+  // Food Bowls & Cans
+  blueKibbleBowl: 40,
+  beigeKibbleBowl: 40,
+  purpleKibbleBowl: 40,
+  whiteKibbleBowl: 40,
+  redKibbleBowl: 40,
+  greenKibbleBowl: 40,
+  redFoodCan: 15,
+  brownFoodCan: 15,
+  greyFoodCan: 15,
+  pinkFoodCan: 15,
+  purpleFoodCan: 15,
+  greenFoodCan: 15,
+  tealFoodCan: 15,
+  greenFoodCan2: 15,
+
+  // Water Bowls
+  blueWaterBowl: 30,
+  beigeWaterBowl: 30,
+  purpleWaterBowl: 30,
+  whiteWaterBowl: 30,
+  redWaterBowl: 30,
+  greenWaterBowl: 30,
+
+  // Cat Toys
+  rainbowCubeToy: 70,
+  rainbowCubeToy2: 70,
+  tealDumbbellToy: 50,
+  brownDumbbellToy: 50,
+  lavenderDumbbellToy: 50,
+  maroonDumbbellToy: 50,
+  darkBlueDumbbellToy: 50,
+  brickRedDumbbellToy: 50,
+  lightBlueDumbbellToy: 50,
+  orangeDumbbellToy: 50,
+  skyBlueDumbbellToy: 50,
+  greenDumbbellToy: 50,
+
+  // Cat Toys – Fish Plushies
+  fishPlushie1: 80,
+  fishPlushie2: 80,
+  fishPlushie3: 80,
+  tealFishPlushie: 80,
+  blueFishPlushie: 80,
+  redFishPlushie: 80,
+
+  // Cat Toys – Yarn Balls
+  greenYarnBallLarge: 45,
+  greenYarnBallSmall: 30,
+  blueYarnBallLarge: 45,
+  blueYarnBallSmall: 30,
+  lightBlueYarnBallLarge: 45,
+  lightBlueYarnBallSmall: 30,
+  creamYarnBallLarge: 45,
+  creamYarnBallSmall: 30,
+  redYarnBallLarge: 45,
+  redYarnBallSmall: 30,
+  greyYarnBallLarge: 45,
+  greyYarnBallSmall: 30,
+  tealYarnBallLarge: 45,
+  tealYarnBallSmall: 30,
+  indigoYarnBallLarge: 45,
+  indigoYarnBallSmall: 30,
+  purpleYarnBallLarge: 45,
+  purpleYarnBallSmall: 30,
+  oliveYarnBallLarge: 45,
+  oliveYarnBallSmall: 30,
+  goldenBrownYarnBallLarge: 45,
+  goldenBrownYarnBallSmall: 30,
+  violetYarnBallLarge: 45,
+  violetYarnBallSmall: 30,
+
+  // Wall Art – Cat Posters
+  creamCatPoster: 90,
+  blueCatPoster: 90,
+  brownCatPoster: 90,
+  cyanCatPoster: 90,
+  greyCatPoster: 90,
+  purpleCatPoster: 90,
+
+  // Wall Art – Heart Frames
+  brownHeartFrame: 75,
+  greyHeartFrame: 75,
+  navyHeartFrame: 75,
+  oliveHeartFrame: 75,
+  whiteHeartFrame: 75,
+  purpleHeartFrame: 75,
+  pinkHeartFrame: 75,
+  yellowHeartFrame: 75,
+  greenHeartFrame: 75,
+
+  // Wall Art – Framed Plant Art
+  framedPlantArt: 110,
+
+  // Climbing Towers
+  beigeClimbingTowerWithStairs: 350,
+  beigeTallClimbingTowerWithStairs: 400,
+
+  // Bones & Mouse Toy
+  smallBone: 25,
+  largeBone: 35,
+  mouseToy: 65,
+
+  // Cat Food Bags
+  smallCatFoodBag: 50,
+  largeCatFoodBag: 90,
+
+  // Cat Towers
+  whiteCatTower: 400,
+  blueCatTower: 400,
+  pinkCatTower: 400,
+
+  // Windows with Trims
+  purpleTrimWindow: 160,
+  blackTrimWindow: 160,
+  greenTrimWindow: 160,
+  whiteTrimWindow: 160,
+
+  // Windows with Curtains
+  whiteCurtainWindow: 180,
+  redCurtainWindow: 180,
+  blueCurtainWindow: 180,
+
+  // Furniture – Cat Stools
+  creamCatStool: 120,
+  greyCatStool: 120,
+  redCatStool: 120,
+  blueCatStool: 120,
+  purpleCatStool: 120,
+
+  // Cat Furniture – Posts
+  yellowCatPost: 220,
+  greenCatPost: 220,
+  pinkCatPost: 220,
+  tealCatPost: 220,
+  whiteCatPost: 220,
+  beigeCatPost: 220,
+
+  // Cat Furniture – Round Towers
+  brownRoundCatTower: 280,
+  yellowRoundCatTower: 280,
+  blueRoundCatTower: 280,
+  redRoundCatTower: 280,
+  mintRoundCatTower: 280,
+};
+
+// ----------------------------
+// Food Prices
+// ----------------------------
+export const foodPrices = {
+  // Comfort Foods (medium priced)
+  CreamySalmonPate: 30,
+  WarmChickenBroth: 25,
+  TunaFlakes: 28,
+  CrispyBaconBits: 32,
+  CheeseMeltMorsels: 30,
+  OceanWhitefishStew: 35,
+  MashedSweetPotatoMedley: 28,
+  ButteryBreadCrumbs: 25,
+  TurkeyRicePorridge: 30,
+  ChickenNoodleSoup: 32,
+  
+  // Street Memories (cheapest)
+  LeftoverPizzaCrust: 15,
+  DiscardedSandwich: 18,
+  MilkFromTrashBin: 15,
+  StreetFishScraps: 22,
+  TinCanTuna: 20,
+  SpoiledBeefBits: 15,
+  CannedSardineDrippings: 18,
+  StaleBreadCrumbs: 15,
+  WiltedLettuceBits: 15,
+  GardenSnailSnack: 25,
+  
+  // Playful Treats (slightly above average)
+  CatnipCookies: 38,
+  SalmonJerkyStrips: 35,
+  CrunchyTunaBiscuits: 32,
+  MouseshapedCheeseTreats: 30,
+  YarnBallCandy: 28,
+  ButterflySprinkles: 30,
+  FrogshapedMousseBites: 32,
+  HedgehogCrunchies: 35,
+  FeatherCrispNibbles: 35,
+  LadybugBerryBites: 30,
+  
+  // Healthy Essentials (average)
+  VitaminRichKibble: 28,
+  ProbioticYogurt: 25,
+  SpinachCatBiscuits: 22,
+  CarrotPuree: 20,
+  SweetPotatoChips: 25,
+  ParsleyPowerPellets: 22,
+  CornFiberCrunch: 20,
+  AppleCiderGel: 25,
+  Omega3FishOilBites: 30,
+  BrownRiceVegMix: 25,
+  
+  // Luxury Indulgences (most expensive)
+  LobsterDelight: 55,
+  DuckALOrange: 48,
+  CaviarMousse: 60,
+  TruffleCatTreats: 45,
+  CrabShrimpMedley: 52,
+  WagyuBeefSliders: 58,
+  GourmetPrawnSupreme: 50,
+  VenisonStew: 45,
+  QuailEggCustard: 48,
+  BrieSalmonFloss: 52
+};
+
+// ----------------------------
+// FurnitureItem Component for furniture selection
+// ----------------------------
+function FurnitureItem({ itemKey, onSelect, isPlaced, isOwned, price }) {
+  const { x, y, width, height } = decorationLibrary[itemKey];
+  
+  // Standard target height for all furniture previews
+  const standardPreviewHeight = 60;
+  
+  // Calculate the scale needed to make this item match the standard height
+  const heightRatio = standardPreviewHeight / height;
+  
+  // Apply the same scale to width to maintain proportions
+  const scaledWidth = width * heightRatio;
+  
+  return (
+    <TouchableOpacity
+      style={[styles.furnitureItem, isPlaced && styles.placedFurnitureItem]}
+      onPress={() => onSelect(itemKey)}
+    >
+      <View style={[styles.furnitureImageContainer, {
+        width: scaledWidth,
+        height: standardPreviewHeight,
+        alignItems: 'center',
+        justifyContent: 'center'
+      }]}>
+        <Image
+          source={require('../asset/RetroCatsPaid/CatItems/Decorations/CatRoomDecorations.png')}
+          style={{
+            position: 'absolute',
+            top: -y * heightRatio,
+            left: -x * heightRatio,
+            width: SHEET_SIZE * heightRatio,
+            height: SHEET_SIZE * heightRatio,
+            resizeMode: 'contain',
+          }}
+        />
+      </View>
+      <Text style={styles.furnitureName}>
+        {itemKey.replace(/([A-Z])/g, ' $1').trim()}
+      </Text>
+      {price && !isOwned && (
+        <Text style={styles.priceTag}>💰 {price}</Text>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ----------------------------
+// Group furniture items by category - ensure no duplicates
+// ----------------------------
+export function groupFurnitureByCategory(decorationLib) {
+  // Helper to ensure no duplicates
+  const processedKeys = new Set();
+  
+  // Process each category in order to avoid duplicates
+  const addToCategory = (category, keys) => {
+    const result = [];
+    for (const key of keys) {
+      if (!processedKeys.has(key)) {
+        processedKeys.add(key);
+        result.push(key);
+      }
+    }
+    return result;
+  };
+  
+  return {
+    Windows: addToCategory('Windows', Object.keys(decorationLib).filter(key => 
+      key.includes('Window') || key.includes('window'))),
+    Plants: addToCategory('Plants', Object.keys(decorationLib).filter(key => 
+      key.includes('Plant') || key.includes('plant') || 
+      key.includes('Tree') || key.includes('tree'))),
+    Beds: addToCategory('Beds', Object.keys(decorationLib).filter(key => 
+      key.includes('Bed') || key.includes('bed'))),
+    'Cat Trees': addToCategory('Cat Trees', Object.keys(decorationLib).filter(key => 
+      key.includes('CatTree') || key.includes('catTree'))),
+    Shelves: addToCategory('Shelves', Object.keys(decorationLib).filter(key => 
+      key.includes('Shelf') || key.includes('shelf'))),
+    Bowls: addToCategory('Bowls', Object.keys(decorationLib).filter(key => 
+      key.includes('Bowl') || key.includes('bowl'))),
+    Toys: addToCategory('Toys', Object.keys(decorationLib).filter(key => 
+      key.includes('Toy') || key.includes('toy'))),
+    Other: addToCategory('Other', Object.keys(decorationLib).filter(key => 
+      !key.includes('Window') && !key.includes('window') &&
+      !key.includes('Plant') && !key.includes('plant') && 
+      !key.includes('Tree') && !key.includes('tree') &&
+      !key.includes('Bed') && !key.includes('bed') &&
+      !key.includes('CatTree') && !key.includes('catTree') &&
+      !key.includes('Shelf') && !key.includes('shelf') &&
+      !key.includes('Bowl') && !key.includes('bowl') &&
+      !key.includes('Toy') && !key.includes('toy')))
+  };
+}
+
+// ----------------------------
+// Furniture Selection Panel Component
+// ----------------------------
+const FurnitureSelectionPanel = React.forwardRef(function FurnitureSelectionPanel(
+  { 
+    groupedFurniture, 
+    onSelectFurniture, 
+    currentDecorations, 
+    onDone, 
+    money, 
+    setMoney,
+    onInitiatePurchase,
+    initialOwnedItems = {}
+  }, 
+  ref
+) {
+  const router = useRouter();
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  
+  // Track which items are already placed in the room and which ones the user owns
+  const [ownedItems, setOwnedItems] = useState(initialOwnedItems || {});
+  
+  // Update ownedItems when initialOwnedItems changes
+  useEffect(() => {
+    if (initialOwnedItems) {
+      setOwnedItems(initialOwnedItems);
+    }
+  }, [initialOwnedItems]);
+  
+  // Expose method to add owned item
+  React.useImperativeHandle(ref, () => ({
+    addOwnedItem: (itemKey) => {
+      setOwnedItems(prev => {
+        const updated = {
+          ...prev,
+          [itemKey]: true
+        };
+        // Save to AsyncStorage whenever ownedItems changes
+        saveOwnedFurniture(updated);
+        return updated;
+      });
+    }
+  }));
+  
+  // Go to furniture shop
+  const handleGoToShop = () => {
+    router.push({
+      pathname: '/Shop',
+      params: { tab: 'furniture' }
+    });
+  };
+  
+  // Track which items are placed in the room
+  const placedItems = {};
+  currentDecorations.forEach(deco => {
+    if (deco.id !== 'cat') { // Skip the cat sprite
+      placedItems[deco.itemKey] = true;
+    }
+  });
+  
+  // Show all items if no category is selected
+  const furnitureToShow = selectedCategory 
+    ? groupedFurniture[selectedCategory] 
+    : Object.values(groupedFurniture).flat();
+  
+  // Group owned items by category for the Storage tab
+  const ownedItemsByCategory = {};
+  Object.keys(ownedItems).forEach(itemKey => {
+    if (ownedItems[itemKey]) {
+      // Find which category this item belongs to
+      for (const [category, items] of Object.entries(groupedFurniture)) {
+        if (items.includes(itemKey)) {
+          if (!ownedItemsByCategory[category]) {
+            ownedItemsByCategory[category] = [];
+          }
+          ownedItemsByCategory[category].push(itemKey);
+          break;
+        }
+      }
+    }
+  });
+
+  // Handle selecting furniture
+  const handleSelectItem = (itemKey) => {
+    if (ownedItems[itemKey]) {
+      // If already owned, select it directly
+      onSelectFurniture(itemKey);
+    } else {
+      // This case should not happen in the storage-only mode
+      console.warn("Tried to select unowned item in Storage mode");
+    }
+  };
+  
+  // Check if there are any owned items
+  const hasOwnedItems = Object.keys(ownedItemsByCategory).length > 0;
+  
+  return (
+    <View style={styles.furnitureSelectionContainer} ref={ref}>
+      {/* Storage title with close button */}
+      <View style={styles.storageTitleContainer}>
+        <Text style={styles.storageTitle}>Decorations</Text>
+        <TouchableOpacity style={styles.closeButton} onPress={onDone}>
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Storage content */}
+      <ScrollView style={styles.storageScrollView}>
+        {hasOwnedItems ? (
+          // Show owned items grouped by category
+          Object.entries(ownedItemsByCategory).map(([category, items]) => (
+            <View key={category} style={styles.categorySection}>
+              <Text style={styles.categoryTitle}>{category}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.itemsRow}>
+                {items.map((itemKey) => (
+                  <FurnitureItem 
+                    key={itemKey} 
+                    itemKey={itemKey} 
+                    onSelect={handleSelectItem} 
+                    isPlaced={placedItems[itemKey]} 
+                    isOwned={ownedItems[itemKey]}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ))
+        ) : (
+          // Display message when no decorations are available
+          <View style={styles.emptyStorageContainer}>
+            <Text style={styles.emptyStorageText}>No decoration items in storage</Text>
+            <TouchableOpacity style={styles.shopButton} onPress={handleGoToShop}>
+              <Text style={styles.shopButtonText}>Go to Shop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+      
+      {/* Shop button if there are furniture items */}
+      {hasOwnedItems && (
+        <View style={styles.shopButtonContainer}>
+          <TouchableOpacity style={styles.shopButton} onPress={handleGoToShop}>
+            <Text style={styles.shopButtonText}>Go to Shop</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+});
+
+// ----------------------------
+// Food Library with Categories
+// ----------------------------
+export const foodCategories = {
+  "Comfort Foods": [
+    "CreamySalmonPate", "WarmChickenBroth", "TunaFlakes", "CrispyBaconBits", 
+    "CheeseMeltMorsels", "OceanWhitefishStew", "MashedSweetPotatoMedley",
+    "ButteryBreadCrumbs", "TurkeyRicePorridge", "ChickenNoodleSoup"
+  ],
+  "Street Memories": [
+    "LeftoverPizzaCrust", "DiscardedSandwich", "MilkFromTrashBin", "StreetFishScraps", 
+    "TinCanTuna", "SpoiledBeefBits", "CannedSardineDrippings", "StaleBreadCrumbs",
+    "WiltedLettuceBits", "GardenSnailSnack"
+  ],
+  "Playful Treats": [
+    "CatnipCookies", "SalmonJerkyStrips", "CrunchyTunaBiscuits", "MouseshapedCheeseTreats", 
+    "YarnBallCandy", "ButterflySprinkles", "FrogshapedMousseBites", "HedgehogCrunchies",
+    "FeatherCrispNibbles", "LadybugBerryBites"
+  ],
+  "Healthy Essentials": [
+    "VitaminRichKibble", "ProbioticYogurt", "SpinachCatBiscuits", "CarrotPuree", 
+    "SweetPotatoChips", "ParsleyPowerPellets", "CornFiberCrunch", "AppleCiderGel",
+    "Omega3FishOilBites", "BrownRiceVegMix"
+  ],
+  "Luxury Indulgences": [
+    "LobsterDelight", "DuckALOrange", "CaviarMousse", "TruffleCatTreats", 
+    "CrabShrimpMedley", "WagyuBeefSliders", "GourmetPrawnSupreme", "VenisonStew",
+    "QuailEggCustard", "BrieSalmonFloss"
+  ]
+};
+
+export const foodLibrary = {
+  // Comfort Foods
+  CreamySalmonPate: { 
+    emoji: "🍣", 
+    happiness: 20, 
+    hunger: 25, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Reminds her of her first comforting meal after rescue."
+  },
+  WarmChickenBroth: { 
+    emoji: "🍗", 
+    happiness: 18, 
+    hunger: 15, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Warms her, recalling gentle care when ill."
+  },
+  TunaFlakes: { 
+    emoji: "🐟", 
+    happiness: 12, 
+    hunger: 20, 
+    category: "Comfort Foods",
+    preference: "Neutral",
+    description: "Familiar taste but sometimes too salty."
+  },
+  CrispyBaconBits: { 
+    emoji: "🥓", 
+    happiness: 22, 
+    hunger: 18, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Crunchy indulgence that makes her feel pampered."
+  },
+  CheeseMeltMorsels: { 
+    emoji: "🧀", 
+    happiness: 20, 
+    hunger: 15, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Rich flavor that soothes her starved memories."
+  },
+  OceanWhitefishStew: { 
+    emoji: "🐠", 
+    happiness: 18, 
+    hunger: 22, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Gentle taste reminding her of safety by the sea."
+  },
+  MashedSweetPotatoMedley: { 
+    emoji: "🥔", 
+    happiness: 15, 
+    hunger: 20, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Soft texture that comforts her like a hug."
+  },
+  ButteryBreadCrumbs: { 
+    emoji: "🍞", 
+    happiness: 16, 
+    hunger: 15, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Simple warmth recalling home-baked treats."
+  },
+  TurkeyRicePorridge: { 
+    emoji: "🍲", 
+    happiness: 17, 
+    hunger: 25, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Soft meal that reminds her of tender care."
+  },
+  ChickenNoodleSoup: { 
+    emoji: "🍜", 
+    happiness: 19, 
+    hunger: 22, 
+    category: "Comfort Foods",
+    preference: "Likes",
+    description: "Brothy warmth echoing kind hands that rescued her."
+  },
+
+  // Street Memories
+  LeftoverPizzaCrust: { 
+    emoji: "🍕", 
+    happiness: 5, 
+    hunger: 15, 
+    category: "Street Memories",
+    preference: "Dislikes",
+    description: "Memories of hunger and scavenging."
+  },
+  DiscardedSandwich: { 
+    emoji: "🥪", 
+    happiness: 6, 
+    hunger: 18, 
+    category: "Street Memories",
+    preference: "Dislikes",
+    description: "Stale taste reminding her of cold nights."
+  },
+  MilkFromTrashBin: { 
+    emoji: "🍼", 
+    happiness: 10, 
+    hunger: 12, 
+    category: "Street Memories",
+    preference: "Neutral",
+    description: "Mixed feelings from survival instincts."
+  },
+  StreetFishScraps: { 
+    emoji: "🐟", 
+    happiness: 15, 
+    hunger: 20, 
+    category: "Street Memories",
+    preference: "Likes",
+    description: "Grateful for rare fulfilling meal on the streets."
+  },
+  TinCanTuna: { 
+    emoji: "🥫", 
+    happiness: 10, 
+    hunger: 18, 
+    category: "Street Memories",
+    preference: "Neutral",
+    description: "Necessary but too metallic for comfort."
+  },
+  SpoiledBeefBits: { 
+    emoji: "🍖", 
+    happiness: 5, 
+    hunger: 15, 
+    category: "Street Memories",
+    preference: "Dislikes",
+    description: "Sour smell echoing days of neglect."
+  },
+  CannedSardineDrippings: { 
+    emoji: "🥫", 
+    happiness: 10, 
+    hunger: 16, 
+    category: "Street Memories",
+    preference: "Neutral",
+    description: "Fills her belly but lacks warmth."
+  },
+  StaleBreadCrumbs: { 
+    emoji: "🥖", 
+    happiness: 6, 
+    hunger: 12, 
+    category: "Street Memories",
+    preference: "Dislikes",
+    description: "Dry taste recalling abandoned days."
+  },
+  WiltedLettuceBits: { 
+    emoji: "🥗", 
+    happiness: 8, 
+    hunger: 10, 
+    category: "Street Memories",
+    preference: "Neutral",
+    description: "Bland reminder of desperate foraging."
+  },
+  GardenSnailSnack: { 
+    emoji: "🐌", 
+    happiness: 16, 
+    hunger: 15, 
+    category: "Street Memories",
+    preference: "Likes",
+    description: "Unexpected delicacy in harsh times."
+  },
+
+  // Playful Treats
+  CatnipCookies: { 
+    emoji: "🐾", 
+    happiness: 30, 
+    hunger: 10, 
+    category: "Playful Treats",
+    preference: "Likes",
+    description: "Saturday afternoons chasing butterflies."
+  },
+  SalmonJerkyStrips: { 
+    emoji: "🦴", 
+    happiness: 25, 
+    hunger: 15, 
+    category: "Playful Treats",
+    preference: "Likes",
+    description: "Playful texture fueling her energy."
+  },
+  CrunchyTunaBiscuits: { 
+    emoji: "🍪", 
+    happiness: 22, 
+    hunger: 12, 
+    category: "Playful Treats",
+    preference: "Likes",
+    description: "Fun crunch that sparks joyous play."
+  },
+  MouseshapedCheeseTreats: { 
+    emoji: "🐭", 
+    happiness: 15, 
+    hunger: 10, 
+    category: "Playful Treats",
+    preference: "Neutral",
+    description: "Adorable shape, ordinary taste."
+  },
+  YarnBallCandy: { 
+    emoji: "🧶", 
+    happiness: 8, 
+    hunger: 8, 
+    category: "Playful Treats",
+    preference: "Dislikes",
+    description: "Playful appearance but bland flavor."
+  },
+  ButterflySprinkles: { 
+    emoji: "🦋", 
+    happiness: 12, 
+    hunger: 6, 
+    category: "Playful Treats",
+    preference: "Neutral",
+    description: "Pretty but not very tasty."
+  },
+  FrogshapedMousseBites: { 
+    emoji: "🐸", 
+    happiness: 13, 
+    hunger: 10, 
+    category: "Playful Treats",
+    preference: "Neutral",
+    description: "Novel shape, indifferent taste."
+  },
+  HedgehogCrunchies: { 
+    emoji: "🦔", 
+    happiness: 20, 
+    hunger: 12, 
+    category: "Playful Treats",
+    preference: "Likes",
+    description: "Fun crunch that tickles her tongue."
+  },
+  FeatherCrispNibbles: { 
+    emoji: "🦜", 
+    happiness: 22, 
+    hunger: 10, 
+    category: "Playful Treats",
+    preference: "Likes",
+    description: "Light flavor that feels like flight."
+  },
+  LadybugBerryBites: { 
+    emoji: "🐞", 
+    happiness: 13, 
+    hunger: 8, 
+    category: "Playful Treats",
+    preference: "Neutral",
+    description: "Sweet but too small for satisfaction."
+  },
+
+  // Healthy Essentials
+  VitaminRichKibble: { 
+    emoji: "🌾", 
+    happiness: 15, 
+    hunger: 25, 
+    category: "Healthy Essentials",
+    preference: "Likes",
+    description: "Energy boost aiding her recovery."
+  },
+  ProbioticYogurt: { 
+    emoji: "🥛", 
+    happiness: 10, 
+    hunger: 12, 
+    category: "Healthy Essentials",
+    preference: "Neutral",
+    description: "Healthful but too bland."
+  },
+  SpinachCatBiscuits: { 
+    emoji: "🥦", 
+    happiness: 5, 
+    hunger: 15, 
+    category: "Healthy Essentials",
+    preference: "Dislikes",
+    description: "Unpleasant texture reminding of vet visits."
+  },
+  CarrotPuree: { 
+    emoji: "🥕", 
+    happiness: 10, 
+    hunger: 15, 
+    category: "Healthy Essentials",
+    preference: "Neutral",
+    description: "Healthy but not her favorite."
+  },
+  SweetPotatoChips: { 
+    emoji: "🍠", 
+    happiness: 18, 
+    hunger: 20, 
+    category: "Healthy Essentials",
+    preference: "Likes",
+    description: "Soft sweetness nourishing her body."
+  },
+  ParsleyPowerPellets: { 
+    emoji: "🌿", 
+    happiness: 8, 
+    hunger: 15, 
+    category: "Healthy Essentials",
+    preference: "Neutral",
+    description: "Good for digestion, lacks flavor."
+  },
+  CornFiberCrunch: { 
+    emoji: "🌽", 
+    happiness: 10, 
+    hunger: 18, 
+    category: "Healthy Essentials",
+    preference: "Neutral",
+    description: "Filling but plain."
+  },
+  AppleCiderGel: { 
+    emoji: "🍎", 
+    happiness: 12, 
+    hunger: 10, 
+    category: "Healthy Essentials",
+    preference: "Neutral",
+    description: "Tangy health boost, minor excitement."
+  },
+  Omega3FishOilBites: { 
+    emoji: "🍣", 
+    happiness: 16, 
+    hunger: 15, 
+    category: "Healthy Essentials",
+    preference: "Likes",
+    description: "Shiny coat support reminding of care."
+  },
+  BrownRiceVegMix: { 
+    emoji: "🍚", 
+    happiness: 10, 
+    hunger: 22, 
+    category: "Healthy Essentials",
+    preference: "Neutral",
+    description: "Balanced nutrition, forgettable taste."
+  },
+
+  // Luxury Indulgences
+  LobsterDelight: { 
+    emoji: "🦞", 
+    happiness: 28, 
+    hunger: 25, 
+    category: "Luxury Indulgences",
+    preference: "Likes",
+    description: "Lavish treat making her feel cherished."
+  },
+  DuckALOrange: { 
+    emoji: "🦆", 
+    happiness: 15, 
+    hunger: 22, 
+    category: "Luxury Indulgences",
+    preference: "Neutral",
+    description: "Fancy aroma, unfamiliar flavor."
+  },
+  CaviarMousse: { 
+    emoji: "🥂", 
+    happiness: 25, 
+    hunger: 20, 
+    category: "Luxury Indulgences",
+    preference: "Likes",
+    description: "Luxurious texture that pampers her palate."
+  },
+  TruffleCatTreats: { 
+    emoji: "🍄", 
+    happiness: 5, 
+    hunger: 15, 
+    category: "Luxury Indulgences",
+    preference: "Dislikes",
+    description: "Too rich and earthy for her liking."
+  },
+  CrabShrimpMedley: { 
+    emoji: "🦀", 
+    happiness: 26, 
+    hunger: 25, 
+    category: "Luxury Indulgences",
+    preference: "Likes",
+    description: "Seafood feast celebrating her rescue."
+  },
+  WagyuBeefSliders: { 
+    emoji: "🥩", 
+    happiness: 27, 
+    hunger: 28, 
+    category: "Luxury Indulgences",
+    preference: "Likes",
+    description: "Premium taste that honors her survival."
+  },
+  GourmetPrawnSupreme: { 
+    emoji: "🍤", 
+    happiness: 15, 
+    hunger: 20, 
+    category: "Luxury Indulgences",
+    preference: "Neutral",
+    description: "Tasty but a bit too delicate."
+  },
+  VenisonStew: { 
+    emoji: "🍖", 
+    happiness: 15, 
+    hunger: 28, 
+    category: "Luxury Indulgences",
+    preference: "Neutral",
+    description: "Hearty but reminds her of tough times."
+  },
+  QuailEggCustard: { 
+    emoji: "🥚", 
+    happiness: 22, 
+    hunger: 18, 
+    category: "Luxury Indulgences",
+    preference: "Likes",
+    description: "Silky smoothness comforting her spirit."
+  },
+  BrieSalmonFloss: { 
+    emoji: "🧀", 
+    happiness: 24, 
+    hunger: 20, 
+    category: "Luxury Indulgences",
+    preference: "Likes",
+    description: "Creamy blend evoking warm cuddles."
+  }
+};
+
+// Get an array of food names for selection
+export const foodNames = Object.keys(foodLibrary);
+
+// ----------------------------
+// Food Item Component for selection
+// ----------------------------
+function FoodItem({ foodKey, onSelect, quantity, price, isOwned, onShowDetails }) {
+  const food = foodLibrary[foodKey];
+  
+  const handlePress = () => {
+    if (onShowDetails) {
+      onShowDetails(foodKey);
+    } else {
+      onSelect(foodKey);
+    }
+  };
+  
+  if (!food) return null;
+  
+  // Get preference display and color
+  const getPreferenceColor = (preference) => {
+    switch (preference) {
+      case 'Likes': return '#4CAF50'; // Green
+      case 'Neutral': return '#FFC107'; // Amber
+      case 'Dislikes': return '#F44336'; // Red
+      default: return '#888888'; // Gray for unknown
+    }
+  };
+  
+  return (
+    <TouchableOpacity style={styles.foodItemContainer} onPress={handlePress}>
+      {/* Move quantity badge to the top left of the overall container */}
+      {quantity > 0 && (
+        <View style={styles.quantityBadge}>
+          <Text style={styles.quantityText}>{quantity}</Text>
+        </View>
+      )}
+      
+      {/* Move preference indicator to the top right of the overall container */}
+      <View style={[
+        styles.preferenceIndicator, 
+        { backgroundColor: isOwned ? getPreferenceColor(food.preference) : '#888888' }
+      ]}>
+        <Text style={styles.preferenceIndicatorText}>
+          {isOwned ? food.preference.charAt(0) : '?'}
+        </Text>
+      </View>
+      
+      <View style={styles.foodImageContainer}>
+        <Text style={styles.foodEmoji}>{food.emoji}</Text>
+        {!isOwned && price && (
+          <View style={styles.priceBadge}>
+            <Text style={styles.priceText}>💰 {price}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.foodName}>{food.displayName || foodKey.replace(/([A-Z])/g, ' $1').trim()}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Food Details Modal Component - moved from FoodItem to be rendered at the app root level
+function FoodDetailsModal({ foodKey, onBuy, onCancel, visible, price, isPurchased, ownedQuantity = 0, onFeed }) {
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
+  const food = foodLibrary[foodKey];
+  
+  if (!visible || !food) return null;
+  
+  const handleBuy = () => {
+    // Pass the quantity to the purchase handler
+    onBuy(foodKey, selectedQuantity);
+  };
+  
+  // Function to get color based on preference
+  const getPreferenceColor = (preference) => {
+    switch (preference) {
+      case 'Likes': return '#4CAF50'; // Green
+      case 'Neutral': return '#FFC107'; // Amber
+      case 'Dislikes': return '#F44336'; // Red
+      default: return '#FFFFFF'; // White
+    }
+  };
+  
+  return (
+    <View style={styles.modalOverlay}>
+      <View style={styles.foodDetailModal}>
+        {/* Close button (X) at top right */}
+        <TouchableOpacity style={styles.modalCloseButton} onPress={onCancel}>
+          <Text style={styles.modalCloseButtonText}>✕</Text>
+        </TouchableOpacity>
+        
+        <Text style={styles.foodDetailTitle}>
+          {food.emoji} {foodKey.replace(/([A-Z])/g, ' $1').trim()}
+        </Text>
+        
+        <View style={[styles.preferenceTag, { backgroundColor: isPurchased ? getPreferenceColor(food.preference) : '#888' }]}>
+          <Text style={styles.preferenceText}>Preference: {isPurchased ? food.preference : '???'}</Text>
+        </View>
+        
+        <Text style={styles.foodDescription}>{food.description}</Text>
+        
+        <View style={styles.nutritionInfo}>
+          <Text style={styles.nutritionText}>Hunger: +{food.hunger}</Text>
+          <Text style={styles.nutritionText}>Happiness: {isPurchased ? `+${food.happiness}` : '???'}</Text>
+        </View>
+        
+        {/* Show owned quantity if any */}
+        {ownedQuantity > 0 && (
+          <Text style={styles.ownedQuantityText}>Owned: {ownedQuantity}</Text>
+        )}
+        
+        {ownedQuantity > 0 ? (
+          <View style={styles.modalButtons}>
+            <TouchableOpacity 
+              style={[styles.feedButton, { flex: 1 }]} 
+              onPress={() => {
+                onCancel(); // Close modal
+                onFeed(foodKey); // Feed the cat
+              }}
+            >
+              <Text style={styles.buttonText}>Feed Cat</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <View style={styles.quantityContainer}>
+              <Text style={styles.quantityLabel}>Quantity:</Text>
+              <View style={styles.quantitySelector}>
+                <TouchableOpacity 
+                  style={styles.quantityButton}
+                  onPress={() => setSelectedQuantity(Math.max(1, selectedQuantity - 1))}
+                >
+                  <Text style={styles.quantityButtonText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.quantityValue}>{selectedQuantity}</Text>
+                <TouchableOpacity 
+                  style={styles.quantityButton}
+                  onPress={() => setSelectedQuantity(selectedQuantity + 1)}
+                >
+                  <Text style={styles.quantityButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <Text style={styles.totalPrice}>Total: 💰 {price * selectedQuantity}</Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.buyButton} onPress={handleBuy}>
+                <Text style={styles.buttonText}>Buy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ----------------------------
+// Food Selection Panel Component
+// ----------------------------
+const FoodSelectionPanel = React.memo(React.forwardRef(function FoodSelectionPanel(
+  { 
+    onSelectFood, 
+    onClose,
+    money, 
+    setMoney,
+    onInitiatePurchase,
+    onShowFoodDetails,
+    purchasedFoods,
+    ownedFood,
+    setOwnedFood
+  }, 
+  ref
+) {
+  const router = useRouter();
+  
+  // Expose method to add owned food
+  React.useImperativeHandle(ref, () => ({
+    addOwnedFood: (foodKey) => {
+      setOwnedFood(prev => ({
+        ...prev,
+        [foodKey]: (prev[foodKey] || 0) + 1
+      }));
+    }
+  }));
+  
+  // Handle selecting food
+  const handleSelectItem = (foodKey, quantity = 1) => {
+    if (ownedFood[foodKey] > 0) {
+      // If already owned, use it directly
+      onSelectFood(foodKey);
+      // Reduce quantity
+      setOwnedFood(prev => ({
+        ...prev,
+        [foodKey]: Math.max(0, prev[foodKey] - 1)
+      }));
+    } else {
+      // This case should not happen in the storage-only mode
+      console.warn("Tried to select unowned food in Storage mode");
+    }
+  };
+  
+  // Go to shop food section
+  const handleGoToShop = () => {
+    router.push({
+      pathname: '/Shop',
+      params: { tab: 'food' }
+    });
+  };
+  
+  // Group owned foods by category
+  const getOwnedFoodsByCategory = () => {
+    const result = {};
+    console.log('[DEBUG] Processing ownedFood in FoodSelectionPanel:', JSON.stringify(ownedFood));
+    
+    Object.entries(ownedFood).forEach(([foodKey, quantity]) => {
+      if (quantity > 0) {
+        const food = foodLibrary[foodKey];
+        if (food) {
+          const category = food.category;
+          if (!result[category]) {
+            result[category] = [];
+          }
+          result[category].push({ key: foodKey, quantity });
+          console.log(`[DEBUG] Added food ${foodKey} with quantity ${quantity} to category ${category}`);
+        } else {
+          console.warn(`Food key ${foodKey} not found in foodLibrary`);
+        }
+      }
+    });
+    
+    console.log('[DEBUG] Final categorized food:', JSON.stringify(result));
+    return result;
+  };
+  
+  // Use useMemo to prevent recalculating on every render
+  const ownedFoodsByCategory = useMemo(() => getOwnedFoodsByCategory(), [ownedFood]);
+  const hasFoodItems = Object.keys(ownedFoodsByCategory).length > 0;
+  
+  return (
+    <View style={styles.foodSelectionContainer} ref={ref}>
+      {/* Food storage title with close button */}
+      <View style={styles.storageTitleContainer}>
+        <Text style={styles.storageTitle}>Food Storage</Text>
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Rest of food panel content */}
+      <ScrollView style={styles.foodPanelScrollView}>
+        {hasFoodItems ? (
+          // Display foods by category in horizontal rows
+          Object.entries(ownedFoodsByCategory).map(([category, foods]) => (
+            <View key={category} style={styles.foodCategoryContainer}>
+              <Text style={styles.foodCategoryTitle}>{category}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.foodRowScroll}>
+                {foods.map(({ key, quantity }) => (
+                  <FoodItem 
+                    key={key} 
+                    foodKey={key} 
+                    onSelect={handleSelectItem} 
+                    quantity={quantity}
+                    isOwned={true}
+                    onShowDetails={onShowFoodDetails}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ))
+        ) : (
+          // Display message when no food is available
+          <View style={styles.emptyStorageContainer}>
+            <Text style={styles.emptyStorageText}>No food items in storage</Text>
+            <TouchableOpacity style={styles.shopButton} onPress={handleGoToShop}>
+              <Text style={styles.shopButtonText}>Go to Shop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+      
+      {/* Shop button if there are food items */}
+      {hasFoodItems && (
+        <View style={styles.shopButtonContainer}>
+          <TouchableOpacity style={styles.shopButton} onPress={handleGoToShop}>
+            <Text style={styles.shopButtonText}>Go to Shop</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}));
+
+// ----------------------------
+// Speech Bubble Component
+// ----------------------------
+function SpeechBubble({ message, position }) {
+  return (
+    <View style={[styles.speechBubble, { top: position.top, left: position.left }]}>
+      <Text style={styles.speechBubbleText}>{message}</Text>
+    </View>
+  );
+}
+
+export default function CatSection({ navigation, route, onFurnitureModeChange, onModeChange, money, setMoney }) {
+  const [stats, setStats] = useState({
+    hunger: 50, // Default to 50% if not in AsyncStorage
+    clean: 40,  // Default to 40% if not in AsyncStorage (changed from 50%)
+    happy: 50,  // Default to 50% happiness level
+  });
+
+  // Animation loading states
+  const [animationsLoaded, setAnimationsLoadedState] = useState(areAnimationsLoaded());
+  const [preloadingAnimation, setPreloadingAnimation] = useState('');
+  const [preloadingFrameIndex, setPreloadingFrameIndex] = useState(0);
+  
+  // Add running state to track if cat is running
+  const [isRunning, setIsRunning] = useState(false);
+  
+  // Preload all animations by playing them off-screen - only if not already loaded
+  useEffect(() => {
+    const initializeAnimations = async () => {
+      // First check if animations were previously loaded
+      const previouslyLoaded = await checkAnimationLoadedState();
+      
+      if (previouslyLoaded) {
+        console.log('Animations were previously loaded, skipping preload');
+        setAnimationsLoadedState(true);
+        return;
+      }
+      
+      // Only load if not already loaded globally
+      if (!areAnimationsLoaded() && !animationsLoaded) {
+        console.log('Loading all animations...');
+        setPreloadingAnimation('All animations');
+        
+        try {
+          // For React Native, we'll use a simpler approach by rendering all animations offscreen at once
+          setTimeout(() => {
+            console.log('All animations preloaded!');
+            // Set both local and global animation loaded state
+            setAnimationsLoadedState(true);
+            setAnimationsLoaded(); // Set global flag
+            saveAnimationLoadedState(); // Save to AsyncStorage for app restarts
+            setPreloadingAnimation(null);
+          }, 500); // Short timeout to ensure the hidden preloader has time to render
+        } catch (err) {
+          console.error('Error preloading animations:', err);
+          // Set loaded anyway to prevent blocking the app
+          setAnimationsLoadedState(true);
+          setAnimationsLoaded(); // Set global flag even if there was an error
+          setPreloadingAnimation(null);
+        }
+      } else {
+        console.log('Animations already loaded, skipping preload');
+      }
+    };
+    
+    initializeAnimations();
+  }, []);
+  
+  // Add daily streak state
+  const [dailyStreak, setDailyStreak] = useState(0);
+  
+  // Money is now passed as a prop, so we don't need to declare it here
+  
+  // Add diamonds state
+  const [diamonds, setDiamonds] = useState(100);
+  
+  // Add owned food state at component level
+  const [ownedFood, setOwnedFood] = useState({
+    CreamySalmonPate: 5,
+    TunaFlakes: 3,
+    ChickenNoodleSoup: 2,
+    ButteryBreadCrumbs: 4,
+    CatnipCookies: 1
+  });
+  
+  // Add owned furniture state at component level
+  const [ownedFurniture, setOwnedFurniture] = useState({});
+
+  // Add state for dust particles
+  const [showDustParticles, setShowDustParticles] = useState(false);
+
+  // Load player data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load cat data from AsyncStorage
+        const [
+          storedStats, 
+          streakValue, 
+          foodData,
+          ownedFurnitureItems
+        ] = await Promise.all([
+          loadStats(),
+          loadDailyStreak(),
+          loadFoodData(),
+          loadOwnedFurniture()
+        ]);
+        
+        // Make sure we have stats in the expected format (replace 'bored' with 'happy' if needed)
+        const formattedStats = { ...storedStats };
+        if ('bored' in formattedStats && !('happy' in formattedStats)) {
+          formattedStats.happy = formattedStats.bored;
+          delete formattedStats.bored;
+          
+          // Save the corrected format back to storage
+          saveStats(formattedStats);
+        }
+        
+        // Update state with AsyncStorage data
+        setStats(formattedStats);
+        setDailyStreak(streakValue);
+        
+        // Process the consolidated food data into separate state variables
+        const ownedFoodItems = {};
+        const purchasedFoodsData = {};
+          
+        // Convert the consolidated data into the two separate formats
+        Object.entries(foodData).forEach(([key, data]) => {
+          if (data.quantity > 0) {
+            ownedFoodItems[key] = data.quantity;
+          }
+          if (data.purchased) {
+            purchasedFoodsData[key] = true;
+          }
+        });
+        
+        setOwnedFood(ownedFoodItems);
+        setPurchasedFoods(purchasedFoodsData);
+        setOwnedFurniture(ownedFurnitureItems);
+        
+        // Process any pending food rewards from chests
+        const pendingRewards = await AsyncStorage.getItem('pendingFoodRewards');
+        if (pendingRewards) {
+          try {
+            const foodRewards = JSON.parse(pendingRewards);
+            if (foodRewards && foodRewards.length > 0) {
+              // Update the consolidated food data with rewards
+              foodRewards.forEach(foodKey => {
+                if (!foodData[foodKey]) {
+                  foodData[foodKey] = { quantity: 0, purchased: true };
+                }
+                foodData[foodKey].quantity += 1;
+              });
+              
+              // Save the updated food data
+              await saveFoodData(foodData);
+              
+              // Also update the local state for UI
+              const updatedOwnedFood = { ...ownedFoodItems };
+              foodRewards.forEach(foodKey => {
+                updatedOwnedFood[foodKey] = (updatedOwnedFood[foodKey] || 0) + 1;
+              });
+              
+              setOwnedFood(updatedOwnedFood);
+              
+              // Clear the pending rewards
+              await AsyncStorage.removeItem('pendingFoodRewards');
+              
+              // Show a notification
+              setSpeechBubbleContent(`Got new food: ${foodRewards.join(', ')}`);
+              setShowSpeechBubble(true);
+              setTimeout(() => setShowSpeechBubble(false), 3000);
+            }
+          } catch (e) {
+            console.error('Error processing food rewards:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading cat data:', error);
+      }
+    };
+    
+    loadData();
+  }, []);
+  
+  // Reload data when the screen is focused to ensure it's up to date
+  // This is particularly important for food data when coming back from Shop
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshData = async () => {
+        try {
+          // Load all data that might have changed
+          const [
+            foodData,
+            currentStats
+          ] = await Promise.all([
+            loadFoodData(),
+            loadStats()
+          ]);
+          
+          // Convert to the formats needed by the current component
+          const ownedFoodItems = {};
+          const purchasedFoodsData = {};
+          
+          // Process the consolidated data into the two separate formats
+          Object.entries(foodData).forEach(([key, data]) => {
+            if (data.quantity > 0) {
+              ownedFoodItems[key] = data.quantity;
+            }
+            if (data.purchased) {
+              purchasedFoodsData[key] = true;
+            }
+          });
+          
+          // Make sure we have stats in the expected format
+          const formattedStats = { ...currentStats };
+          if ('bored' in formattedStats && !('happy' in formattedStats)) {
+            formattedStats.happy = formattedStats.bored;
+            delete formattedStats.bored;
+            
+            // Save the corrected format back to storage
+            saveStats(formattedStats);
+          }
+          
+          // Update state with refreshed data
+          setStats(formattedStats);
+          setOwnedFood(ownedFoodItems);
+          setPurchasedFoods(purchasedFoodsData);
+        } catch (error) {
+          console.error('Error refreshing data on focus:', error);
+        }
+      };
+      
+      refreshData();
+      
+      return () => {};
+    }, [])
+  );
+  
+  // Save stats whenever they change
+  useEffect(() => {
+    if (Object.values(stats).some(val => val !== 0)) {
+      saveStats(stats);
+    }
+  }, [stats]);
+  
+  // Save owned food to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (Object.keys(ownedFood).length > 0) {
+      saveOwnedFood(ownedFood);
+    }
+  }, [ownedFood]);
+  
+  // Save purchased foods to AsyncStorage whenever they change
+  useEffect(() => {
+    if (Object.keys(purchasedFoods).length > 0) {
+      savePurchasedFoods(purchasedFoods);
+    }
+  }, [purchasedFoods]);
+  
+
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isFeedingMode, setIsFeedingMode] = useState(false);
+  const [showRemoveButton, setShowRemoveButton] = useState(false);
+  const [selectedItemForRemoval, setSelectedItemForRemoval] = useState(null);
+  const [showSpeechBubble, setShowSpeechBubble] = useState(false);
+  const [speechBubbleContent, setSpeechBubbleContent] = useState("");
+  const [speechBubblePosition, setSpeechBubblePosition] = useState({ top: 0, left: 0 });
+  
+  // Fix missing isMovingFurniture state variable
+  const [isMovingFurniture, setIsMovingFurniture] = useState(false);
+  const [originalPosition, setOriginalPosition] = useState(null);
+  
+  // Simplified cat state - only keep direction for sprite rendering
+  const [catDirection, setCatDirection] = useState(1); // 1 = right, -1 = left
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [currentAnimation, setCurrentAnimation] = useState('Idle');
+
+  // Notify parent component when furniture mode changes
+  useEffect(() => {
+    if (onFurnitureModeChange) {
+      // Only notify for edit mode, not feeding mode
+      onFurnitureModeChange(isEditMode);
+    }
+  }, [isEditMode, onFurnitureModeChange]);
+
+  const [decorations, setDecorations] = useState([
+    { id: '1', itemKey: 'whiteWindow', roomRow: 7, roomCol: 20 },
+    { id: '2', itemKey: 'blueBed', roomRow: 11, roomCol: 13 },
+    { id: '4', itemKey: 'blueKibbleBowl', roomRow: 21, roomCol: 21 },
+    { id: '5', itemKey: 'whiteCurtainWindow', roomRow: 7, roomCol: 5 },
+    { id: '6', itemKey: 'creamCatPoster', roomRow: 7, roomCol: 19 },
+    { id: '7', itemKey: 'brownPottedTree', roomRow: 10, roomCol: 19 },
+    { id: '8', itemKey: 'lightPinkPottedPlant', roomRow: 12, roomCol: 8 },
+    { id: '9', itemKey: 'beigeCurtainWindow', roomRow: 6, roomCol: 12 },
+    { id: '10', itemKey: 'pinkShelf', roomRow: 15, roomCol: 2 },
+
+    { id: 'cat', itemKey: 'catSprite', roomRow: Math.floor(ROOM_ROWS / 2), roomCol: Math.floor(ROOM_COLS / 2) },
+  ]);
+
+  const [selectedDecorationId, setSelectedDecorationId] = useState(null);
+  
+  // Cat sprite animation effect - keep this for animation frames
+  useEffect(() => {
+    const animation = catAnimations[currentAnimation];
+    
+    if (!animation) {
+      console.warn(`Animation "${currentAnimation}" not found in catAnimations library`);
+      return;
+    }
+    
+    // Advance frames
+    const timer = setInterval(() => {
+      setFrameIndex(prev => (prev + 1) % animation.frames);
+    }, animationInterval);
+    
+    // Clean up timer when component unmounts or dependencies change
+    return () => clearInterval(timer);
+  }, [currentAnimation, animationInterval]); // Add animationInterval as dependency
+
+  // Track the position of the selected decoration for the remove button
+  const [removeButtonPosition, setRemoveButtonPosition] = useState({ top: 0, left: 0 });
+  
+  // Make the room area take a ref so we can force click it
+  const roomAreaRef = useRef(null);
+
+  // State to track if we're in moving mode (completely separate from selection)
+  const [movingMode, setMovingMode] = useState(false);
+  
+  // Reference to store original touch position when moving starts
+  const touchStartRef = useRef({ x: 0, y: 0 });
+
+  // Completely override the RoomDecorationItem's default behavior when selected
+  const handleRoomAreaOverride = (event) => {
+    // Directly call the room area press handler with the event
+    if (isEditMode && selectedDecorationId) {
+      handleRoomAreaPress(event);
+      // Prevent the original onPress from being called
+      return true;
+    }
+    return false;
+  };
+
+  const handleSelectDecoration = (id) => {
+    // Only allow selecting decorations when in edit mode
+    if (isEditMode && id !== 'cat') {
+      const selectedDeco = decorations.find(d => d.id === id);
+      if (selectedDeco) {
+        // Save original position in case user cancels the move
+        setOriginalPosition({
+          id: selectedDeco.id,
+          roomRow: selectedDeco.roomRow,
+          roomCol: selectedDeco.roomCol
+        });
+        
+        // Calculate position for remove button to be above the item
+        const { roomRow, roomCol, itemKey } = selectedDeco;
+        
+        let iconOffsetY = 10; // Default offset
+        let iconOffsetX = 0;  // Center by default
+        
+        if (decorationLibrary[itemKey]) {
+          const { width } = decorationLibrary[itemKey];
+          iconOffsetX = (width * ROOM_SCALE) / 2; // Center over the item
+        }
+        
+        setRemoveButtonPosition({
+          top: roomRow * ROOM_CELL_SIZE - iconOffsetY,
+          left: roomCol * ROOM_CELL_SIZE + iconOffsetX - 10, // Center the X button
+        });
+      }
+      
+      // Always set selected and show buttons when selecting a new decoration
+      setSelectedDecorationId(id);
+      setShowRemoveButton(true);
+      setSelectedItemForRemoval(id);
+      setIsMovingFurniture(true);
+      setMovingMode(true); // Set moving mode to true
+    }
+  };
+
+  // Handle confirming the new furniture position
+  const handleConfirmPosition = () => {
+    setShowRemoveButton(false);
+    setSelectedDecorationId(null);
+    setSelectedItemForRemoval(null);
+    setIsMovingFurniture(false);
+    setOriginalPosition(null);
+    setMovingMode(false);
+  };
+
+  // Handle canceling the move and returning to original position
+  const handleCancelMove = () => {
+    if (originalPosition) {
+      // Return the item to its original position
+      setDecorations(
+        decorations.map((decoration) =>
+          decoration.id === originalPosition.id
+            ? { ...decoration, roomRow: originalPosition.roomRow, roomCol: originalPosition.roomCol }
+            : decoration
+        )
+      );
+    }
+    setShowRemoveButton(false);
+    setSelectedDecorationId(null);
+    setSelectedItemForRemoval(null);
+    setIsMovingFurniture(false);
+    setOriginalPosition(null);
+    setMovingMode(false);
+  };
+
+  // Handle removing an item from the room
+  const handleRemoveItem = () => {
+    if (selectedItemForRemoval) {
+      setDecorations(decorations.filter(deco => deco.id !== selectedItemForRemoval));
+      setSelectedDecorationId(null);
+      setShowRemoveButton(false);
+      setSelectedItemForRemoval(null);
+      setIsMovingFurniture(false);
+      setOriginalPosition(null);
+      setMovingMode(false);
+    }
+  };
+
+  // Group furniture items by category
+  const groupedFurniture = groupFurnitureByCategory(decorationLibrary);
+
+  const handleSelectFurniture = (itemKey) => {
+    // Check if this item is already placed
+    const existingItem = decorations.find(deco => deco.itemKey === itemKey && deco.id !== 'cat');
+    
+    if (existingItem) {
+      // If it's already placed, remove it from placed and highlight it
+      setSelectedDecorationId(existingItem.id);
+      setShowRemoveButton(true);
+      setSelectedItemForRemoval(existingItem.id);
+      setIsMovingFurniture(true);
+      setMovingMode(true); // Set moving mode to true for existing items
+    } else {
+      // Create a new decoration with the selected furniture
+      const newId = `decoration-${Date.now()}`;
+      const newDecoration = {
+        id: newId,
+        itemKey: itemKey,
+        roomRow: 15, // Default position - center of room
+        roomCol: 15, // Default position - center of room
+      };
+      
+      setDecorations([...decorations, newDecoration]);
+      setSelectedDecorationId(newId);
+      setIsMovingFurniture(true);
+      setMovingMode(true); // Set moving mode to true for new items
+    }
+  };
+
+  // We need to separate the touch start and the actual press handler
+  const handleRoomTouchStart = (event) => {
+    if (isEditMode) {
+      // Store the initial touch position
+      touchStartRef.current = {
+        x: event.nativeEvent.locationX,
+        y: event.nativeEvent.locationY
+      };
+    }
+  };
+
+  const [showPetOptions, setShowPetOptions] = useState(false);
+
+  const handleRoomAreaPress = (event) => {
+    // If we have a selected decoration, move it (only when in edit mode)
+    if (isEditMode && selectedDecorationId && movingMode) {
+      const { locationX, locationY } = event.nativeEvent;
+      const selectedDecoration = decorations.find(d => d.id === selectedDecorationId);
+      
+      // If we don't find the decoration, it might have been removed
+      if (!selectedDecoration) {
+        setSelectedDecorationId(null);
+        setShowRemoveButton(false);
+        setIsMovingFurniture(false);
+        setMovingMode(false);
+        return;
+      }
+      
+      // Get the dimensions of the selected decoration
+      let decoWidth, decoHeight;
+      if (selectedDecoration.itemKey === 'catSprite') {
+        decoWidth = frameWidth * CAT_SIZE;
+        decoHeight = frameHeight * CAT_SIZE;
+      } else {
+        const deco = decorationLibrary[selectedDecoration.itemKey];
+        decoWidth = deco.width * ROOM_SCALE;
+        decoHeight = deco.height * ROOM_SCALE;
+      }
+      
+      // Calculate new position
+      const newLeft = locationX - (decoWidth / 2);
+      const newTop = locationY - (decoHeight / 2);
+      const newCol = Math.round(newLeft / ROOM_CELL_SIZE);
+      const newRow = Math.round(newTop / ROOM_CELL_SIZE);
+      
+      // Update the decoration position
+      setDecorations(
+        decorations.map((decoration) =>
+          decoration.id === selectedDecorationId
+            ? { ...decoration, roomRow: newRow, roomCol: newCol }
+            : decoration
+        )
+      );
+      
+      // Update remove button position
+      let iconOffsetY = 10; // Default offset
+      let iconOffsetX = decoWidth / 2; // Center over the item
+      
+      setRemoveButtonPosition({
+        top: newRow * ROOM_CELL_SIZE - iconOffsetY,
+        left: newCol * ROOM_CELL_SIZE + iconOffsetX - 10, // Center the X button
+      });
+    } else {
+      // If tapping on empty area while not moving, hide any remove buttons
+      setShowRemoveButton(false);
+      setSelectedDecorationId(null);
+      setSelectedItemForRemoval(null);
+      setIsMovingFurniture(false);
+      setOriginalPosition(null);
+      setMovingMode(false);
+    }
+  };
+
+  // Toggle edit mode handler
+  const handleToggleEditMode = () => {
+    const newEditMode = !isEditMode;
+    setIsEditMode(newEditMode);
+    
+    // Reset selection state when toggling edit mode
+    setSelectedDecorationId(null);
+    setShowRemoveButton(false);
+    setSelectedItemForRemoval(null);
+    
+    // Exit feeding mode if needed
+    if (newEditMode) {
+      setIsFeedingMode(false);
+    }
+    
+    // Notify parent component about furniture mode change
+    if (onFurnitureModeChange) {
+      onFurnitureModeChange(newEditMode);
+    }
+  };
+
+  // Update feeding mode handler
+  const handleFeedMode = () => {
+    setIsFeedingMode(!isFeedingMode);
+    
+    // Exit edit mode if needed
+    if (!isFeedingMode) {
+      setIsEditMode(false);
+      // Notify parent component about furniture mode change
+      if (onFurnitureModeChange) {
+        onFurnitureModeChange(false);
+      }
+    }
+  };
+
+  // Handle selecting food from storage
+  const handleSelectFood = (foodKey) => {
+    // Skip if cat is running
+    if (isRunning) return;
+    
+    // Find the food and update stats
+    const food = foodLibrary[foodKey];
+    if (food && animationsLoaded && !isAnimating) {
+      // Set animating state
+      setIsAnimating(true);
+      
+      // Update hunger and happiness stats
+      setStats(prevStats => ({
+        ...prevStats,
+        hunger: Math.min(100, prevStats.hunger + food.hunger),
+        happy: Math.min(100, prevStats.happy + food.happiness)
+      }));
+      
+      // Play appropriate animation based on food preference
+      const playFeedingAnimation = async () => {
+        const preferenceToAnimation = {
+          'Likes': 'Happy',
+          'Neutral': 'Idle',
+          'Dislikes': 'Hurt'
+        };
+        
+        // Get animation based on preference or default to 'Excited'
+        const feedAnimation = preferenceToAnimation[food.preference] || 'Excited';
+        
+        // Save the current animation to go back to
+        const previousAnim = currentAnimation;
+        
+        // Reset frame index before animation to reduce flickering
+        setFrameIndex(0);
+        
+        // Play the eating animation then return to previous state
+        await playAnimationOnce(
+          feedAnimation, 
+          previousAnim, 
+          setCurrentAnimation,
+          setFrameIndex,
+          catAnimations,
+          animationInterval
+        );
+        
+        // Reset animating state
+        setIsAnimating(false);
+      };
+      
+      // Start animation sequence
+      playFeedingAnimation();
+      
+      // Update the food in the consolidated food data structure
+      loadFoodData().then(foodData => {
+        if (foodData[foodKey]) {
+          // Reduce the quantity by 1
+          foodData[foodKey].quantity = Math.max(0, foodData[foodKey].quantity - 1);
+          
+          // Save back to AsyncStorage
+          saveFoodData(foodData).then(() => {
+            // Also update local state for immediate UI response
+            setOwnedFood(prev => {
+              const newQuantity = Math.max(0, (prev[foodKey] || 0) - 1);
+              return {
+                ...prev,
+                [foodKey]: newQuantity
+              };
+            });
+          });
+        }
+      }).catch(error => {
+        console.error('Error updating food data after feeding:', error);
+      });
+      
+      // Show emoji speech bubble based on cat's preference for this food
+      const getReactionEmoji = (preference) => {
+        const reactions = {
+          'Likes': ["😋", "😻", "🤤", "😍", "😸"],
+          'Neutral': ["😐", "🙂", "😶", "🤔", "😑"],
+          'Dislikes': ["🤢", "😾", "😖", "😫", "😤"]
+        };
+        
+        const options = reactions[preference] || reactions['Neutral'];
+        const randomIndex = Math.floor(Math.random() * options.length);
+        return options[randomIndex];
+      };
+      
+      const reactionEmoji = getReactionEmoji(food.preference);
+      // Just show the emoji and food emoji
+      setSpeechBubbleContent(`${reactionEmoji} ${food.emoji}`);
+      
+      // Position the speech bubble above the cat
+      const catDeco = decorations.find(d => d.id === 'cat');
+      if (catDeco) {
+        setSpeechBubblePosition({
+          top: catDeco.roomRow * ROOM_CELL_SIZE - 40,
+          left: catDeco.roomCol * ROOM_CELL_SIZE
+        });
+      }
+      
+      setShowSpeechBubble(true);
+      
+      // Hide speech bubble after 2 seconds
+      setTimeout(() => {
+        setShowSpeechBubble(false);
+      }, 2000);
+      
+      // Notify parent we're still in food mode
+      if (onModeChange) {
+        onModeChange(false);
+      }
+    }
+  };
+
+  // Exit feeding mode
+  const handleExitFeedMode = () => {
+    setIsFeedingMode(false);
+    
+    // Notify parent we're back in home mode (show review button and chests)
+    if (onModeChange) {
+      onModeChange(true);
+    }
+  };
+
+  // Create refs for each dust particle animation
+  const dustAnimations = useRef(Array.from({ length: 15 }).map(() => ({
+    top: new Animated.Value(Math.random() * (frameHeight * CAT_SIZE)),
+    left: new Animated.Value(Math.random() * (frameWidth * CAT_SIZE)),
+    opacity: new Animated.Value(0.2 + Math.random() * 0.3) // More translucent
+  }))).current;
+
+  // Add renderDecorations function back
+  const renderDecorations = () => {
+    return (
+      <>
+        {decorations.map((deco) => {
+          // Skip rendering cat directly, as we'll render it later
+          if (deco.id === 'cat') return null;
+          
+          return (
+            <RoomDecorationItem
+              key={deco.id}
+              id={deco.id}
+              itemKey={deco.itemKey}
+              roomRow={deco.roomRow}
+              roomCol={deco.roomCol}
+              isSelected={selectedDecorationId === deco.id}
+              onSelect={handleRoomAreaOverride}
+              frameIndex={frameIndex}
+              currentAnimation={currentAnimation}
+              direction={catDirection}
+            />
+          );
+        })}
+        
+        {/* Render cat separately */}
+        {decorations.map((deco) => {
+          if (deco.id === 'cat') {
+            return (
+              <React.Fragment key={deco.id}>
+                {/* Speech bubble for cleaning - positioned directly above cat */}
+                {showCleanSpeechBubble && (
+                  <View 
+                    style={{
+                      position: 'absolute',
+                      left: deco.roomCol * ROOM_CELL_SIZE + (frameWidth * CAT_SIZE * 0.25),
+                      top: deco.roomRow * ROOM_CELL_SIZE - 60,
+                      backgroundColor: 'white',
+                      borderRadius: 15,
+                      padding: 10,
+                      zIndex: Math.floor(deco.roomRow) + 20, // Higher zIndex to appear above dust
+                      elevation: 5,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: 80,
+                      minHeight: 40,
+                    }}
+                  >
+                    <Text style={{ fontSize: 16, textAlign: 'center', flexWrap: 'wrap' }}>{cleanSpeechContent}</Text>
+                    <View style={{
+                      position: 'absolute',
+                      bottom: -10,
+                      left: 15,
+                      width: 0,
+                      height: 0,
+                      borderLeftWidth: 10,
+                      borderRightWidth: 10,
+                      borderTopWidth: 15,
+                      borderLeftColor: 'transparent',
+                      borderRightColor: 'transparent',
+                      borderTopColor: 'white',
+                    }} />
+                  </View>
+                )}
+                
+                <RoomDecorationItem
+                  id={deco.id}
+                  itemKey={deco.itemKey}
+                  roomRow={deco.roomRow}
+                  roomCol={deco.roomCol}
+                  isSelected={selectedDecorationId === deco.id}
+                  onSelect={handleRoomAreaOverride}
+                  frameIndex={frameIndex}
+                  currentAnimation={currentAnimation}
+                  direction={catDirection}
+                  onCatTap={handleCatTap}
+                />
+                
+                {/* Dust particles when showing */}
+                {showDustParticles && (
+                  <View 
+                    style={{
+                      position: 'absolute',
+                      left: deco.roomCol * ROOM_CELL_SIZE - 10,
+                      top: deco.roomRow * ROOM_CELL_SIZE - 10,
+                      width: frameWidth * CAT_SIZE + 20,
+                      height: frameHeight * CAT_SIZE + 20,
+                      zIndex: Math.floor(deco.roomRow) + 16,
+                    }}
+                  >
+                    {dustAnimations.map((anim, index) => (
+                      <Animated.View 
+                        key={index}
+                        style={{
+                          position: 'absolute',
+                          transform: [
+                            { translateX: anim.left },
+                            { translateY: anim.top },
+                            { rotate: `${Math.random() * 360}deg` }
+                          ],
+                          width: 3 + Math.random() * 4,
+                          height: 3 + Math.random() * 4,
+                          backgroundColor: 'rgba(0, 0, 0, 0.5)', // Black, translucent
+                          borderRadius: 2,
+                          opacity: anim.opacity
+                        }}
+                      />
+                    ))}
+                  </View>
+                )}
+              </React.Fragment>
+            );
+          }
+          return null;
+        })}
+      </>
+    );
+  };
+
+  // Update the MoneyIndicator component
+  const MoneyIndicator = () => (
+    <View style={styles.moneyIndicator}>
+      <View style={styles.streakContainer}>
+        <Text style={styles.streakIcon}>🔥</Text>
+        <Text style={styles.streakCount}>{dailyStreak}</Text>
+      </View>
+      <Text style={styles.moneyIcon}>💰</Text>
+      <Text style={styles.moneyText}>{money}</Text>
+    </View>
+  );
+
+  // Add purchase confirmation states
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [purchaseItem, setPurchaseItem] = useState(null);
+  const [purchaseType, setPurchaseType] = useState(null); // 'furniture' or 'food'
+  
+  // Handle initiating a purchase
+  const handleInitiatePurchase = (item, type, quantity = 1) => {
+    setPurchaseItem(item);
+    setPurchaseType(type);
+    // Also store the quantity for food purchases
+    setPurchaseQuantity(quantity);
+    setIsPurchasing(true);
+  };
+  
+  // Add state for purchase quantity
+  const [purchaseQuantity, setPurchaseQuantity] = useState(1);
+  
+  // Handle confirming a purchase
+  const handleConfirmPurchase = () => {
+    if (!purchaseItem) return;
+    
+    if (purchaseType === 'furniture') {
+      const price = furniturePrices[purchaseItem] || 0;
+      
+      if (money >= price) {
+        // Deduct money and immediately save
+        const newMoney = money - price;
+        setMoney(newMoney);
+        
+        // Update local owned furniture state
+        setOwnedFurniture(prev => {
+          const updated = {
+            ...prev,
+            [purchaseItem]: true
+          };
+          return updated;
+        });
+        
+        // Add to owned items in furniture panel
+        if (furnitureRef.current && furnitureRef.current.addOwnedItem) {
+          furnitureRef.current.addOwnedItem(purchaseItem);
+        }
+      } else {
+        alert('Not enough money to buy this item!');
+      }
+    } else if (purchaseType === 'food') {
+      const price = foodPrices[purchaseItem] || 0;
+      const totalPrice = price * purchaseQuantity;
+      
+      if (money >= totalPrice) {
+        // Deduct money based on quantity
+        const newMoney = money - totalPrice;
+        setMoney(newMoney);
+        
+        // Add to owned food in food panel, respect quantity
+        if (foodPanelRef.current && foodPanelRef.current.addOwnedFood) {
+          for (let i = 0; i < purchaseQuantity; i++) {
+            foodPanelRef.current.addOwnedFood(purchaseItem);
+          }
+        }
+      } else {
+        alert('Not enough money to buy this food!');
+      }
+    }
+    
+    // Reset purchase state
+    setIsPurchasing(false);
+    setPurchaseItem(null);
+    setPurchaseType(null);
+    setPurchaseQuantity(1);
+  };
+  
+  // Handle canceling a purchase
+  const handleCancelPurchase = () => {
+    setIsPurchasing(false);
+    setPurchaseItem(null);
+    setPurchaseType(null);
+  };
+  
+  // Create refs for panels
+  const furnitureRef = useRef(null);
+  const foodPanelRef = useRef(null);
+
+  // Food detail modal state
+  const [selectedFoodForDetails, setSelectedFoodForDetails] = useState(null);
+  const [isFoodDetailsVisible, setIsFoodDetailsVisible] = useState(false);
+
+  // Food detail modal handlers
+  const handleShowFoodDetails = (foodKey) => {
+    setSelectedFoodForDetails(foodKey);
+    setIsFoodDetailsVisible(true);
+  };
+
+  const handleBuyFood = (foodKey, quantity) => {
+    setIsFoodDetailsVisible(false);
+    
+    // Use the consolidated food data structure
+    loadFoodData().then(foodData => {
+      // Initialize this food item if it doesn't exist
+      if (!foodData[foodKey]) {
+        foodData[foodKey] = { quantity: 0, purchased: false };
+      }
+      
+      // Mark as purchased
+      foodData[foodKey].purchased = true;
+      
+      // Save the updated food data
+      saveFoodData(foodData).then(() => {
+        // Also update local state for UI
+        setPurchasedFoods(prev => ({
+          ...prev,
+          [foodKey]: true
+        }));
+        
+        // Initialize the purchase
+        handleInitiatePurchase(foodKey, 'food', quantity);
+      });
+    }).catch(error => {
+      console.error('Error updating food purchase status:', error);
+    });
+  };
+
+  const handleCancelFoodDetails = () => {
+    setIsFoodDetailsVisible(false);
+    setSelectedFoodForDetails(null);
+  };
+
+  // Add a new state for purchased foods in the CatSection component
+  const [purchasedFoods, setPurchasedFoods] = useState({});
+
+  // Update pet options state effect
+  useEffect(() => {
+    if (onFurnitureModeChange) {
+      // Consider pet options as a type of furniture mode
+      onFurnitureModeChange(isEditMode || showPetOptions);
+    }
+  }, [isEditMode, showPetOptions]);
+
+  // Remove the handleModeToggle function and replace with separate handlers for decoration and food
+  const handleDecorationPress = () => {
+    console.log('Decorate button clicked - entering decoration mode');
+    setIsEditMode(true);
+    setIsFeedingMode(false);
+    
+    // Notify parent component about furniture mode change
+    if (onFurnitureModeChange) {
+      onFurnitureModeChange(true);
+    }
+    
+    // Notify parent we're in deco mode (hide review button and chests)
+    if (onModeChange) {
+      onModeChange(false);
+    }
+  };
+
+  const handleFoodPress = () => {
+    console.log('Food button clicked - entering food mode');
+    setIsFeedingMode(true);
+    setIsEditMode(false);
+    
+    // Notify parent we're in food mode (hide review button and chests)
+    if (onModeChange) {
+      onModeChange(false);
+    }
+  };
+
+  const handleCloseDecoMode = () => {
+    // Reset all decoration-related states
+    setIsEditMode(false);
+    setSelectedDecorationId(null);
+    setShowRemoveButton(false);
+    setSelectedItemForRemoval(null);
+    setIsMovingFurniture(false);
+    setOriginalPosition(null);
+    setMovingMode(false);
+    
+    // Notify parent component about furniture mode change
+    if (onFurnitureModeChange) {
+      onFurnitureModeChange(false);
+    }
+    
+    // Notify parent we're back in home mode (show review button and chests)
+    if (onModeChange) {
+      onModeChange(true);
+    }
+  };
+
+  const handleCloseFoodMode = () => {
+    // Reset all food-related states
+    setIsFeedingMode(false);
+    
+    // Notify parent we're back in home mode (show review button and chests)
+    if (onModeChange) {
+      onModeChange(true);
+    }
+  };
+
+  // Check cleanliness and show dust particles if below 50%
+  useEffect(() => {
+    // If cleanliness is below 50%, show dust particles
+    if (stats.clean < 50 && !showDustParticles) {
+      setShowDustParticles(true);
+      
+      // Animate each dust particle
+      dustAnimations.forEach(anim => {
+        // Reset position
+        anim.top.setValue(Math.random() * (frameHeight * CAT_SIZE));
+        anim.left.setValue(Math.random() * (frameWidth * CAT_SIZE));
+        
+        // Create slow floating animation
+        Animated.loop(
+          Animated.sequence([
+            Animated.parallel([
+              Animated.timing(anim.top, {
+                toValue: Math.random() * (frameHeight * CAT_SIZE),
+                duration: 3000 + Math.random() * 2000, // Slow movement: 3-5 seconds
+                useNativeDriver: true
+              }),
+              Animated.timing(anim.left, {
+                toValue: Math.random() * (frameWidth * CAT_SIZE),
+                duration: 3000 + Math.random() * 2000, // Slow movement: 3-5 seconds
+                useNativeDriver: true
+              })
+            ])
+          ])
+        ).start();
+      });
+    } else if (stats.clean >= 50 && showDustParticles) {
+      // If cleanliness is 50% or above, hide dust particles
+      setShowDustParticles(false);
+    }
+  }, [stats.clean]); // Run this effect whenever cleanliness changes
+
+  // Add state for clean button cooldown
+  const [cleanButtonCooldown, setCleanButtonCooldown] = useState(false);
+  // Add state for speech bubble
+  const [showCleanSpeechBubble, setShowCleanSpeechBubble] = useState(false);
+  // Add state for speech bubble content
+  const [cleanSpeechContent, setCleanSpeechContent] = useState("");
+
+  // Array of emoji combinations for the speech bubble
+  const cleaningEmojiCombinations = [
+    '🛁',
+    '🧼',
+    '🧽',
+    '💦',
+    '💨',
+    '🛁',
+    '🫧',
+    '🧴',
+    '🧤',
+    '✨',
+    '🧻',
+    '🪥',
+  ];
+
+  // Add a function to handle cleaning the cat
+  const handleCleanCat = () => {
+    // Skip if cat is running
+    if (isRunning) return;
+    
+    // Only if dirty enough, animations are loaded, and not already animating
+    if (stats.clean < 70 && animationsLoaded && !isAnimating) {
+      // Set animating state
+      setIsAnimating(true);
+      
+      // Update cleanliness only, remove happiness bonus
+      setStats(prevStats => ({
+        ...prevStats,
+        clean: 100 // Fully clean the cat
+      }));
+      
+      // Play a happy animation sequence
+      const playCleanliness = async () => {
+        // Save the current animation
+        const previousAnim = currentAnimation;
+        
+        // Show dust particles
+        setShowDustParticles(true);
+        
+        // Animate dust particles
+        dustAnimations.forEach(anim => {
+          Animated.sequence([
+            Animated.timing(anim.top, {
+              toValue: -Math.random() * 30,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim.opacity, {
+              toValue: 0,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        });
+        
+        // Reset frame index before animation to reduce flickering
+        setFrameIndex(0);
+        
+        // Play the cleaning animation
+        await playAnimationOnce(
+          'Tickle', 
+          previousAnim, 
+          setCurrentAnimation,
+          setFrameIndex,
+          catAnimations,
+          animationInterval
+        );
+        
+        // Hide dust particles
+        setTimeout(() => {
+          setShowDustParticles(false);
+          
+          // Reset dust animation values for next time
+          dustAnimations.forEach(anim => {
+            anim.top.setValue(Math.random() * (frameHeight * CAT_SIZE));
+            anim.left.setValue(Math.random() * (frameWidth * CAT_SIZE));
+            anim.opacity.setValue(0.2 + Math.random() * 0.3);
+          });
+        }, 1500);
+        
+        // Reset animating state
+        setIsAnimating(false);
+      };
+      
+      // Start the cleaning sequence
+      playCleanliness();
+      
+      // Show an emoji speech bubble above the cat
+      const catDeco = decorations.find(d => d.id === 'cat');
+      const cleanEmojis = [
+        "✨", "🧼", "🛁", "💦", "🫧"
+      ];
+      
+      if (catDeco) {
+        // Set emoji content (randomly selected)
+        setCleanSpeechContent(cleanEmojis[Math.floor(Math.random() * cleanEmojis.length)]);
+        
+        // Show and then hide after 2 seconds
+        setShowCleanSpeechBubble(true);
+        setTimeout(() => {
+          setShowCleanSpeechBubble(false);
+        }, 2000);
+      }
+    } else {
+      Alert.alert("Already Clean", "Your cat is already pretty clean!");
+    }
+  };
+
+  // Add function to set all stats to 0 (for testing)
+  const handleResetStats = () => {
+    // Reset stats for testing
+    setStats({
+      hunger: 50,
+      clean: 40,
+      happy: 50
+    });
+    
+    // Reset owned food for testing (add to this emergency reset)
+    resetStorage().then(() => {
+      Alert.alert('Storage Reset', 'AsyncStorage has been reset to new defaults. Please restart the app.');
+      
+      // Re-load defaults
+      loadData();
+    }).catch(error => {
+      console.error('Error resetting storage:', error);
+      Alert.alert('Error', 'Failed to reset storage.');
+    });
+  };
+
+  // Show dust particles effect when cat is dirty
+  useEffect(() => {
+    // If cat is dirty (cleanliness < 50), show dust particles
+    if (stats.clean < 50 && !showDustParticles) {
+      setShowDustParticles(true);
+    } else if (stats.clean >= 50 && showDustParticles) {
+      // If cat becomes clean again, hide dust particles
+      setShowDustParticles(false);
+    }
+  }, [stats.clean]); // Run this effect whenever cleanliness changes
+
+  // Add this function to the CatSection component
+  const handleCatTap = () => {
+    // Skip if cat is already running
+    if (isRunning) return;
+    
+    // Only play happy animation if cat is clean, animations are loaded, and not already animating
+    if (stats.clean > 50 && animationsLoaded && !isEditMode && !isFeedingMode && !isAnimating) {
+      // Set animating state to true
+      setIsAnimating(true);
+      
+      // Increase happiness by 5 points
+      setStats(prevStats => ({
+        ...prevStats,
+        happy: Math.min(100, prevStats.happy + 5)
+      }));
+      
+      // Use the animation helper to play the animation once
+      const playHappyAnimation = async () => {
+        // Save current animation
+        const previousAnim = currentAnimation;
+        
+        // Reset frame index before animation to reduce flickering
+        setFrameIndex(0);
+        
+        // Play the happy animation and then return to previous state
+        await playAnimationOnce(
+          'Happy', 
+          previousAnim, 
+          setCurrentAnimation,
+          setFrameIndex,
+          catAnimations,
+          animationInterval
+        );
+        
+        // Set animating state back to false when done
+        setIsAnimating(false);
+      };
+      
+      // Start animation
+      playHappyAnimation();
+      
+      // Show a random emoji speech bubble
+      const happyEmojis = [
+        "😺", "😸", "😻", "💕", "❤️"
+      ];
+      
+      // Set speech content and position
+      const catDeco = decorations.find(d => d.id === 'cat');
+      if (catDeco) {
+        setSpeechBubbleContent(happyEmojis[Math.floor(Math.random() * happyEmojis.length)]);
+        setSpeechBubblePosition({
+          top: catDeco.roomRow * ROOM_CELL_SIZE - 40,
+          left: catDeco.roomCol * ROOM_CELL_SIZE
+        });
+        
+        // Show and hide after 1.5 seconds instead of 2 seconds
+        setShowSpeechBubble(true);
+        setTimeout(() => {
+          setShowSpeechBubble(false);
+        }, 1500);
+      }
+    }
+  };
+
+  // Add a state to track when animation is in progress
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Add a function to handle toggling the cat's running animation to the right
+  const handleToggleRunning = () => {
+    // Only toggle if animations are loaded and not already animating
+    if (animationsLoaded && !isAnimating) {
+      // Toggle running state
+      setIsRunning(prevState => !prevState);
+      
+      // Set the cat's animation
+      if (!isRunning) {
+        // Set animating state to prevent multiple runs
+        setIsAnimating(true);
+        
+        // Switch to running animation
+        setCurrentAnimation('Running');
+        
+        // Running animation faces right by default (defaultDirection: 1)
+        // Keep the natural direction for running right
+        setCatDirection(1);
+        
+        // Find cat decoration
+        const catDeco = decorations.find(d => d.id === 'cat');
+        if (catDeco) {
+          // Calculate 5% of screen width
+          const moveDistance = width * 0.05;
+          
+          // Calculate new position (moving to the right)
+          const newCol = catDeco.roomCol + (moveDistance / ROOM_CELL_SIZE);
+          
+          // Animate the cat moving
+          const startTime = Date.now();
+          const startCol = catDeco.roomCol;
+          const duration = 1000; // 1 second for the animation
+          
+          const animateMovement = () => {
+            const elapsedTime = Date.now() - startTime;
+            const progress = Math.min(elapsedTime / duration, 1);
+            
+            // Linear interpolation between start and end positions
+            const currentCol = startCol + (progress * (newCol - startCol));
+            
+            // Update cat position
+            setDecorations(prevDecorations => 
+              prevDecorations.map(deco => 
+                deco.id === 'cat' 
+                  ? { ...deco, roomCol: currentCol } 
+                  : deco
+              )
+            );
+            
+            // Continue animation if not complete
+            if (progress < 1) {
+              requestAnimationFrame(animateMovement);
+            } else {
+              // Animation complete
+              setIsAnimating(false);
+              
+              // IMPORTANT: When switching to idle after running right:
+              // Idle animation naturally faces left (defaultDirection: -1)
+              // We need to flip it to face right, so use -1 to flip
+              setCatDirection(-1);
+              
+              // Then switch to idle animation 
+              setCurrentAnimation('Idle');
+              
+              setIsRunning(false);
+            }
+          };
+          
+          // Start the animation
+          requestAnimationFrame(animateMovement);
+        }
+      } else {
+        // Switch back to idle animation
+        setCurrentAnimation('Idle');
+      }
+    }
+  };
+
+  // Add a function to handle toggling the cat's running animation to the left
+  const handleToggleRunningLeft = () => {
+    // Only toggle if animations are loaded and not already animating
+    if (animationsLoaded && !isAnimating) {
+      // Toggle running state
+      setIsRunning(prevState => !prevState);
+      
+      // Set the cat's animation
+      if (!isRunning) {
+        // Set animating state to prevent multiple runs
+        setIsAnimating(true);
+        
+        // Switch to running animation
+        setCurrentAnimation('Running');
+        
+        // Running animation faces right by default (defaultDirection: 1)
+        // Flip it to face left for running left
+        setCatDirection(-1);
+        
+        // Find cat decoration
+        const catDeco = decorations.find(d => d.id === 'cat');
+        if (catDeco) {
+          // Calculate 5% of screen width
+          const moveDistance = width * 0.05;
+          
+          // Calculate new position (moving to the left)
+          const newCol = catDeco.roomCol - (moveDistance / ROOM_CELL_SIZE);
+          
+          // Animate the cat moving
+          const startTime = Date.now();
+          const startCol = catDeco.roomCol;
+          const duration = 1000; // 1 second for the animation
+          
+          const animateMovement = () => {
+            const elapsedTime = Date.now() - startTime;
+            const progress = Math.min(elapsedTime / duration, 1);
+            
+            // Linear interpolation between start and end positions
+            const currentCol = startCol - (progress * (startCol - newCol));
+            
+            // Update cat position
+            setDecorations(prevDecorations => 
+              prevDecorations.map(deco => 
+                deco.id === 'cat' 
+                  ? { ...deco, roomCol: currentCol } 
+                  : deco
+              )
+            );
+            
+            // Continue animation if not complete
+            if (progress < 1) {
+              requestAnimationFrame(animateMovement);
+            } else {
+              // Animation complete
+              setIsAnimating(false);
+              
+              // IMPORTANT: When switching to idle after running left:
+              // Idle animation naturally faces left (defaultDirection: -1)
+              // Keep it natural, so use 1 (no flip needed)
+              setCatDirection(1);
+              
+              // Then switch to idle animation 
+              setCurrentAnimation('Idle');
+              
+              setIsRunning(false);
+            }
+          };
+          
+          // Start the animation
+          requestAnimationFrame(animateMovement);
+        }
+      } else {
+        // Switch back to idle animation
+        setCurrentAnimation('Idle');
+      }
+    }
+  };
+
+  const preloadingAnimationDetails = preloadingAnimation ? catAnimations[preloadingAnimation] : null;
+
+  // Effect to maintain direction when animation changes
+  useEffect(() => {
+    // If we're going from Running (which faces right) to Idle (which faces left),
+    // and our current direction is right (1), we need to maintain that direction
+    if (currentAnimation === 'Idle' && catDirection === 1) {
+      // Ensure we stay facing right by explicitly setting direction again
+      setCatDirection(1);
+    }
+  }, [currentAnimation, catDirection]);
+
+  return (
+    <View style={styles.container}>
+      <ImageBackground source={require('../asset/background.png')} style={styles.backgroundImage}>
+      
+      {/* Off-screen animation preloader - only show when actually loading */}
+      {!animationsLoaded && !areAnimationsLoaded() && (
+        <View style={styles.hiddenPreloader}>
+          {Object.entries(catAnimations).map(([name, animation]) => (
+            <Image
+              key={name}
+              source={animation.source}
+              style={{
+                width: animation.frames * frameWidth,
+                height: frameHeight,
+              }}
+            />
+          ))}
+        </View>
+      )}
+      
+      {/* Animation preloading indicator - only show when actually loading */}
+      {!animationsLoaded && !areAnimationsLoaded() && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF9800" />
+          <Text style={styles.loadingText}>
+            {preloadingAnimation ? `Loading ${preloadingAnimation}...` : 'Preparing...'}
+          </Text>
+          <Text style={styles.loadingSubText}>
+            {preloadingAnimationDetails ? 
+              `Frame ${preloadingFrameIndex + 1}/${preloadingAnimationDetails.frames}` : 
+              'Please wait...'}
+          </Text>
+        </View>
+      )}
+      
+      {/* Reset button for development */}
+      <TouchableOpacity 
+        style={styles.resetButton}
+        onPress={handleResetStats}
+      >
+        <Text style={styles.resetButtonText}>Reset</Text>
+      </TouchableOpacity>
+      
+      {/* --- Status Bar --- Hide only in edit mode, keep visible during feeding */}
+      {!isEditMode && (
+      <View style={styles.statusContainer}>
+        {/* Make daily streak and money in a separate container with distinct styling */}
+        <View style={styles.streakAndMoneyContainer}>
+          <View style={styles.dailyStreakContainer}>
+            <Text style={styles.streakIcon}>🔥</Text>
+            <Text style={styles.streakText}>{dailyStreak}</Text>
+          </View>
+          
+          <View style={styles.moneyStatusBar}>
+            <Text style={styles.moneyIcon}>💰</Text>
+            <Text style={styles.moneyText}>{money}</Text>
+          </View>
+          
+          <View style={styles.diamondContainer}>
+            <Text style={styles.diamondIcon}>💎</Text>
+            <Text style={styles.diamondText}>{diamonds}</Text>
+          </View>
+        </View>
+        
+        {/* Single row for all status bars with improved styling */}
+        <View style={styles.statusBarsRow}>
+          {Object.entries(stats).map(([key, value]) => (
+            <View key={key} style={styles.statusBarCompact}>
+              <View style={styles.barBackground}>
+                <View style={[styles.barFill, { width: `${value}%`, backgroundColor: STATS_COLORS[key] }]} />
+                <Text style={styles.percentageTextCentered}>{value}%</Text>
+              </View>
+              <Text style={styles.statusLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      )}
+
+      {/* --- Action Buttons --- */}
+      {isEditMode && (
+        <View style={[styles.actionButtons, isEditMode && styles.editModeActionButtons]}>
+          {/* Confirm and Move to Storage buttons when in edit mode and furniture is selected */}
+          {isEditMode && selectedDecorationId && (
+            <>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleConfirmPosition}
+              >
+                <View style={styles.buttonIconContainer}>
+                  <Text style={styles.buttonIcon}>✓</Text>
+                </View>
+                <Text style={styles.buttonText}>Confirm</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.moveToStorageButton}
+                onPress={handleRemoveItem}
+              >
+                <View style={styles.buttonIconContainer}>
+                  <Text style={styles.buttonIcon}>📦</Text>
+                </View>
+                <Text style={styles.buttonText}>Move to Storage</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          
+          {isFeedingMode && (
+            <TouchableOpacity 
+              style={[styles.editButton, styles.exitModeButton]}
+              onPress={handleExitFeedMode}
+            >
+              <Text style={styles.actionButtonIcon}>✕</Text>
+              <Text style={styles.actionButtonText}>Close</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* --- Room Area --- Make it taller only in edit mode */}
+      <View style={[
+        styles.roomAreaWrapper, 
+        isEditMode && styles.roomAreaWrapperEditMode
+      ]}>
+        {/* Overlay to capture all touches when in moving mode */}
+        {movingMode && (
+          <View 
+            style={styles.movingOverlay}
+            onTouchStart={handleRoomTouchStart}
+            onStartShouldSetResponder={() => true}
+            onResponderGrant={handleRoomAreaPress}
+          />
+        )}
+        
+        <View style={styles.roomArea}>
+          <Pressable 
+            style={styles.roomArea} 
+            onTouchStart={handleRoomTouchStart}
+            onPress={handleRoomAreaPress}
+          >
+            <Image
+              source={require('../asset/RetroCatsPaid/Catroom/Rooms/Room1.png')}
+              style={styles.roomImage}
+              resizeMode="contain"
+            />
+            
+            {renderDecorations()}
+            
+            {/* Speech Bubble */}
+            {showSpeechBubble && (
+              <SpeechBubble 
+                message={speechBubbleContent}
+                position={speechBubblePosition}
+              />
+            )}
+          </Pressable>
+        </View>
+        
+        {/* Remove room arrows - no longer needed */}
+      </View>
+      
+      {/* Remove duplicate speech bubble here */}
+      
+      {/* Remove Button for selected decoration */}
+      {showRemoveButton && selectedItemForRemoval && (
+        <TouchableOpacity
+          style={[styles.removeButton, { top: removeButtonPosition.top, left: removeButtonPosition.left }]}
+          onPress={handleRemoveItem}
+        >
+          <Text style={styles.removeButtonText}>✕</Text>
+        </TouchableOpacity>
+      )}
+      
+      {/* Cat food purchase/details modal */}
+      {isFoodDetailsVisible && (
+        <FoodDetailsModal
+          foodKey={selectedFoodForDetails}
+          onBuy={handleBuyFood}
+          onCancel={handleCancelFoodDetails}
+          visible={isFoodDetailsVisible}
+          price={foodLibrary[selectedFoodForDetails]?.price || 0}
+          isPurchased={purchasedFoods[selectedFoodForDetails] || false}
+          ownedQuantity={ownedFood[selectedFoodForDetails] || 0}
+          onFeed={handleSelectFood}
+        />
+      )}
+      
+      {/* Purchase confirmation modal */}
+      {isPurchasing && (
+        <View style={styles.purchaseConfirmation}>
+          <View style={styles.purchaseConfirmationContent}>
+            <Text style={styles.purchaseConfirmationTitle}>
+              Confirm Purchase
+            </Text>
+            
+            {/* Add item preview */}
+            {purchaseType === 'furniture' && purchaseItem && (
+              <View style={styles.previewImageContainer}>
+                {/* Furniture preview */}
+                <View style={{
+                  width: 80,
+                  height: 80,
+                  overflow: 'hidden',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 10,
+                }}>
+                  {decorationLibrary[purchaseItem] && (
+                    <Image
+                      source={require('../asset/RetroCatsPaid/CatItems/Decorations/CatRoomDecorations.png')}
+                      style={{
+                        position: 'absolute',
+                        top: -decorationLibrary[purchaseItem].y * (80 / decorationLibrary[purchaseItem].height),
+                        left: -decorationLibrary[purchaseItem].x * (80 / decorationLibrary[purchaseItem].height),
+                        width: SHEET_SIZE * (80 / decorationLibrary[purchaseItem].height),
+                        height: SHEET_SIZE * (80 / decorationLibrary[purchaseItem].height),
+                        resizeMode: 'contain',
+                      }}
+                    />
+                  )}
+                </View>
+              </View>
+            )}
+            
+            {purchaseType === 'food' && purchaseItem && (
+              <View style={styles.previewImageContainer}>
+                {/* Food preview */}
+                <Text style={styles.foodEmojiPreview}>
+                  {foodLibrary[purchaseItem]?.emoji || "🍽️"}
+                </Text>
+              </View>
+            )}
+            
+            <Text style={styles.purchaseConfirmationText}>
+              {purchaseType === 'furniture' ? 
+                `Would you like to buy ${purchaseItem?.replace(/([A-Z])/g, ' $1').trim()} for ${furniturePrices[purchaseItem] || 0}💰?` : 
+                `Would you like to buy ${purchaseQuantity}x ${purchaseItem?.replace(/([A-Z])/g, ' $1').trim()} for ${(foodPrices[purchaseItem] || 0) * purchaseQuantity}💰?`}
+            </Text>
+            <View style={styles.purchaseConfirmationButtons}>
+              <TouchableOpacity 
+                style={[styles.purchaseButton, styles.cancelButton]}
+                onPress={handleCancelPurchase}
+              >
+                <Text style={styles.purchaseButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.purchaseButton, styles.confirmButton]}
+                onPress={handleConfirmPurchase}
+              >
+                <Text style={styles.purchaseButtonText}>Buy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+      
+      {/* --- MAIN PANELS --- */}
+      
+      {/* Furniture Panel */}
+      {isEditMode && (
+        <FurnitureSelectionPanel
+          ref={furnitureRef}
+          groupedFurniture={groupedFurniture}
+          onSelectFurniture={handleSelectFurniture}
+          currentDecorations={decorations}
+          onDone={handleCloseDecoMode}
+          money={money}
+          setMoney={setMoney}
+          onInitiatePurchase={(itemKey) => handleInitiatePurchase(itemKey, 'furniture')}
+          initialOwnedItems={ownedFurniture}
+        />
+      )}
+      
+      {/* Food Selection Panel */}
+      {isFeedingMode && (
+        <FoodSelectionPanel
+          ref={foodPanelRef}
+          onSelectFood={handleSelectFood}
+          onClose={handleCloseFoodMode}
+          money={money}
+          setMoney={setMoney}
+          onInitiatePurchase={handleInitiatePurchase}
+          onShowFoodDetails={handleShowFoodDetails}
+          purchasedFoods={purchasedFoods}
+          ownedFood={ownedFood}
+          setOwnedFood={setOwnedFood}
+        />
+      )}
+
+      {/* Quick Action Buttons */}
+      {!isEditMode && !isFeedingMode && (
+        <View style={styles.quickActionsContainer}>
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={handleDecorationPress}
+          >
+            <Text style={styles.quickActionIcon}>🛋️</Text>
+            <Text style={styles.quickActionText}>Decorate</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={handleFoodPress}
+          >
+            <Text style={styles.quickActionIcon}>🍽️</Text>
+            <Text style={styles.quickActionText}>Feed</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[
+              styles.quickActionButton,
+              cleanButtonCooldown && styles.disabledQuickActionButton
+            ]}
+            onPress={handleCleanCat}
+            disabled={cleanButtonCooldown}
+          >
+            <Text style={styles.quickActionIcon}>🧼</Text>
+            <Text style={styles.quickActionText}>Clean</Text>
+          </TouchableOpacity>
+          
+          {/* Run right button */}
+          <TouchableOpacity 
+            style={[
+              styles.quickActionButton,
+              isRunning && styles.activeQuickActionButton
+            ]}
+            onPress={handleToggleRunning}
+          >
+            <Text style={styles.quickActionIcon}>➡️</Text>
+            <Text style={styles.quickActionText}>Right</Text>
+          </TouchableOpacity>
+          
+          {/* Run left button */}
+          <TouchableOpacity 
+            style={[
+              styles.quickActionButton,
+              isRunning && styles.activeQuickActionButton
+            ]}
+            onPress={handleToggleRunningLeft}
+          >
+            <Text style={styles.quickActionIcon}>⬅️</Text>
+            <Text style={styles.quickActionText}>Left</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[
+              styles.quickActionButton,
+              styles.testButton
+            ]}
+            onPress={handleResetStats}
+          >
+            <Text style={styles.quickActionIcon}>⚠️</Text>
+            <Text style={styles.quickActionText}>Test</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      </ImageBackground>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    // Remove any top padding or margin here if present
+  },
+  statusContainer: {
+    flexDirection: 'column',
+    padding: 10,
+    marginTop: Platform.OS === 'ios' ? 45 : 20,
+  },
+  statusBarsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+  },
+  statusBarCompact: {
+    width: '30%', // Give each status bar equal width in the row
+    marginVertical: 4,
+  },
+  statusBar: {
+    width: '48%',
+    marginVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusLabel: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  barBackground: {
+    height: 12,
+    backgroundColor: '#333',
+    borderRadius: 6,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  percentageText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  percentageTextCentered: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    lineHeight: 12,
+    backgroundColor: 'transparent',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 1,
+  },
+  // Action buttons
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between', // Change to space-between to distribute buttons evenly
+    marginTop: height * 0.03,
+    paddingHorizontal: 10,
+    flexWrap: 'nowrap', // Prevent wrapping
+    alignItems: 'center', // Center align buttons
+  },
+  editButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginHorizontal: 2, // Reduce margin to match other buttons
+    elevation: 3,
+    flex: 1, // Make it flex like other buttons
+  },
+  activeEditButton: {
+    backgroundColor: '#4CAF50',
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginHorizontal: 2, // Reduce horizontal margin
+    elevation: 3,
+    minWidth: 0, // Remove minimum width
+  },
+  actionButtonIcon: {
+    fontSize: 18,
+    marginVertical: 2,
+  },
+  actionButtonText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Room Area
+  roomAreaWrapper: {
+    alignSelf: 'center',
+    marginVertical: '2%', // Use percentage instead of fixed value
+    width: ROOM_BG_SIZE,
+    height: ROOM_BG_SIZE,
+    maxHeight: '70%', // Limit max height
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  roomArea: {
+    width: ROOM_BG_SIZE,
+    height: ROOM_BG_SIZE,
+    position: 'relative',
+  },
+  roomImage: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  genericFoodText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  foodLabel: {
+    position: 'absolute',
+    bottom: -20,
+    left: '50%',
+    transform: [{ translateX: -25 }],
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    backgroundColor: '#0008',
+    paddingHorizontal: 5,
+    borderRadius: 4,
+  },
+  // Furniture selection styles
+  furnitureSelectionContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingTop: 15,
+    paddingBottom: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    maxHeight: height * 0.4, // Responsive max height
+  },
+  furnitureCategoryContainer: {
+    marginTop: 5,
+    marginBottom: 15,
+    paddingHorizontal: 10,
+  },
+  categoryButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginHorizontal: 5,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+  },
+  selectedCategoryButton: {
+    backgroundColor: '#4CAF50',
+  },
+  categoryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  furnitureScrollView: {
+    minHeight: 80,
+    maxHeight: 150,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+  },
+  furnitureItem: {
+    marginHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 5,
+    width: 90,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+  },
+  furnitureName: {
+    color: 'white',
+    fontSize: 11,
+    textAlign: 'center',
+    maxWidth: 100,
+    minHeight: 30, // Ensure enough space for name
+  },
+  // Storage styles
+  storageContainer: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  storageTitle: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 10,
+    marginLeft: 5,
+  },
+  // Edit mode adjustments
+  editModeActionButtons: {
+    marginTop: 45, // Add extra margin at top when status bar is hidden
+  },
+  // Make room area taller in edit mode
+  roomAreaWrapperEditMode: {
+    marginTop: 10, // Less margin needed when status bar is hidden
+  },
+  // Moving overlay to capture all touches
+  movingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 999, // Higher than room contents but lower than buttons
+  },
+  // New styles
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  tabButton: {
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    marginHorizontal: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+  },
+  activeTabButton: {
+    backgroundColor: '#4CAF50',
+  },
+  tabButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  shopContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  comingSoonText: {
+    color: 'white',
+    fontSize: 18,
+    fontStyle: 'italic',
+  },
+  
+  // Storage and shop scroll views
+  storageScrollView: {
+    maxHeight: 250,
+  },
+  shopScrollView: {
+    maxHeight: 250,
+  },
+  
+  // Category section styles
+  categorySection: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  categoryTitle: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
+    marginBottom: 10,
+    marginLeft: 5,
+  },
+  itemsRow: {
+    minHeight: 80,
+    maxHeight: 120,
+  },
+  // Edit button styles (separate from action buttons)
+  editButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    marginHorizontal: 2, // Reduce margin to match other buttons
+    elevation: 3,
+    flex: 1, // Make it flex like other buttons
+  },
+  activeEditButton: {
+    backgroundColor: '#4CAF50',
+  },
+  
+  // New confirm button in action bar
+  confirmButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+    elevation: 3,
+    flex: 1,
+  },
+  
+  // New move to storage button in action bar
+  moveToStorageButton: {
+    backgroundColor: '#FF9800',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+    elevation: 3,
+    flex: 1,
+  },
+  
+  // New button icon container
+  buttonIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  buttonIcon: {
+    fontSize: 20,
+    marginVertical: 2,
+  },
+  
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  // Food panel styles
+  foodSelectionContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,1)',
+    paddingTop: 15,
+    paddingBottom: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    maxHeight: height * 0.4, // Responsive max height
+    zIndex: 9999,
+  },
+  foodPanelScrollView: {
+    maxHeight: 180,
+  },
+  foodCategoryContainer: {
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  foodCategoryTitle: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 10,
+    marginLeft: 5,
+  },
+  foodRowScroll: {
+    paddingBottom: 5,
+  },
+  foodItem: {
+    width: 80,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 10,
+    borderRadius: 10,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  foodEmoji: {
+    fontSize: 30,
+    marginBottom: 5,
+  },
+  foodName: {
+    color: 'white',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  closeFoodPanelButton: {
+    backgroundColor: '#FF5252',
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 15,
+    alignSelf: 'center',
+    width: 120,
+    alignItems: 'center',
+  },
+  closeFoodPanelButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  activeActionButton: {
+    backgroundColor: '#4CAF50',
+  },
+  
+  // Speech bubble styles
+  speechBubble: {
+    position: 'absolute',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 10,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    borderWidth: 2,
+    borderColor: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  speechBubbleText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  speechBubbleTail: {
+    position: 'absolute',
+    bottom: -15,
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 15,
+    borderRightWidth: 15,
+    borderTopWidth: 20,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: 'white',
+    transform: [{ translateX: -7 }],
+    shadowColor: 'black',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.5,
+    shadowRadius: 1,
+    elevation: 3,
+  },
+  // Money indicator styles
+  moneyIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    position: 'absolute',
+    top: 10, // Move higher up
+    right: 10, // Position in corner instead of center
+    zIndex: 9999,
+    borderWidth: 2,
+    borderColor: '#FFD700', // Gold border
+  },
+  moneyIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  moneyText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 22,
+  },
+  
+  // Price tag styles
+  priceTag: {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: 'white',
+    padding: 3,
+    borderRadius: 5,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  
+  foodPriceTag: {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: 'white',
+    padding: 2,
+    borderRadius: 5,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+
+  // Purchase confirmation dialog styles
+  purchaseConfirmation: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10000,
+  },
+  purchaseConfirmationContent: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    width: '80%',
+    maxWidth: 300,
+    alignItems: 'center',
+  },
+  purchaseConfirmationTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  purchaseConfirmationText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#555',
+  },
+  purchaseConfirmationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  purchaseButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  confirmButton: {
+    backgroundColor: '#4CAF50',
+  },
+  cancelButton: {
+    backgroundColor: '#F44336',
+  },
+  purchaseButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Ensure bottom navigation has appropriate z-index (lower than cat food)
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    height: Math.min(height * 0.07, 55), // Responsive height
+    backgroundColor: '#1A1A1A',
+    paddingVertical: 3,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 10,
+    zIndex: 9980,
+  },
+  
+  // Chest animation styles
+  chestAnimationContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10000, // Above everything else
+  },
+  chestAnimationWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  // Rewards styles
+  rewardsContainer: {
+    backgroundColor: 'rgba(50, 30, 0, 0.95)',
+    borderRadius: 20,
+    padding: 20,
+    width: '80%',
+    maxWidth: 300,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFD700',
+  },
+  rewardsTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  goldReward: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 15,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  goldIcon: {
+    fontSize: 30,
+    marginRight: 10,
+  },
+  goldAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFD700',
+  },
+  foodRewardsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: 20,
+    width: '100%',
+  },
+  foodItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 10,
+    padding: 10,
+    margin: 5,
+    alignItems: 'center',
+    width: 80,
+  },
+  foodEmoji: {
+    fontSize: 24,
+    marginBottom: 5,
+  },
+  foodName: {
+    color: 'white',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 3,
+  },
+  foodQuantity: {
+    color: '#FFD700',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  tapToCloseText: {
+    color: 'white',
+    fontSize: 14,
+    opacity: 0.7,
+    marginTop: 10,
+  },
+  timerText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  readyTimerText: {
+    color: '#FFD700',
+  },
+  unlockableTimerText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  emptyChestText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  chestSlotContainer: {
+    borderRadius: 15,
+    padding: 5,
+    alignItems: 'center',
+    marginHorizontal: 5,
+    backgroundColor: '#FFD700',
+    zIndex: 9990, // High z-index to be above navigation
+  },
+  chestSlotRow: {
+    position: 'absolute',
+    bottom: 120,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  unlockConfirmationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10001,
+  },
+  unlockConfirmationContainer: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    width: '80%',
+    maxWidth: 300,
+    alignItems: 'center',
+  },
+  unlockConfirmationTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  unlockChestImageContainer: {
+    marginBottom: 10,
+    marginTop: 10,
+  },
+
+  unlockButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    width: '100%',
+  },
+  unlockButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 5,
+    elevation: 3,
+    flex: 1,
+  },
+  unlockButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  cancelUnlockButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 10,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 5,
+    elevation: 3,
+    flex: 1,
+  },
+  ownedTag: {
+    backgroundColor: 'rgba(76, 175, 80, 0.8)',  // Green background
+    color: 'white',
+    padding: 3,
+    borderRadius: 5,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 2,
+    fontWeight: 'bold',
+  },
+  // Food detail modal styles
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10000,
+  },
+  foodDetailModal: {
+    backgroundColor: '#333',
+    borderRadius: 15,
+    padding: 20,
+    width: '80%',
+    maxWidth: 350,
+    borderWidth: 2,
+    borderColor: '#555',
+  },
+  foodDetailTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  preferenceTag: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    alignSelf: 'center',
+    marginBottom: 15,
+  },
+  preferenceText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  foodDescription: {
+    color: 'white',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 15,
+    fontStyle: 'italic',
+  },
+  nutritionInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 15,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    padding: 10,
+  },
+  nutritionText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  quantityContainer: {
+    marginBottom: 15,
+  },
+  quantityLabel: {
+    color: 'white',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  quantitySelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityButton: {
+    backgroundColor: '#555',
+    width: 35,
+    height: 35,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 5,
+  },
+  quantityButtonText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  quantityValue: {
+    color: 'white',
+    fontSize: 18,
+    paddingHorizontal: 15,
+  },
+  totalPrice: {
+    color: '#FFD700',
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 15,
+    fontWeight: 'bold',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  buyButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // ... existing code ...
+  
+  // Food item styles
+  foodItemContainer: {
+    backgroundColor: 'rgba(50, 50, 50, 0.9)',
+    borderRadius: 10,
+    padding: 10,
+    marginHorizontal: 6,
+    width: 80,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: 10,
+  },
+  foodImageContainer: {
+    position: 'relative',
+    width: 50,
+    height: 50,
+    backgroundColor: 'rgba(30, 30, 30, 0.7)',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+  },
+  foodEmoji: {
+    fontSize: 30,
+  },
+  quantityBadge: {
+    position: 'absolute',
+    top: 5,
+    left: 5,
+    backgroundColor: '#FF6B6B',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  quantityText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  priceBadge: {
+    position: 'absolute',
+    bottom: -10,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  priceText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    // Ensure the background image fits properly
+  },
+  preferenceIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  preferenceIndicatorText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  moneyStatusBar: {
+    backgroundColor: 'rgba(50, 50, 100, 0.8)',
+    borderRadius: 15,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+    alignSelf: 'flex-end',
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    elevation: 3,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+  },
+  moneyIcon: {
+    fontSize: 20,
+    marginRight: 5,
+  },
+  moneyText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  streakAndMoneyContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
+  },
+  
+  dailyStreakContainer: {
+    backgroundColor: 'rgba(100, 50, 50, 0.8)',
+    borderRadius: 15,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: '#FF6347',
+    elevation: 3,
+    shadowColor: '#FF6347',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+  },
+  
+  streakIcon: {
+    fontSize: 20,
+    marginRight: 5,
+  },
+  
+  streakText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  statusBarCompact: {
+    width: '30%', // Give each status bar equal width in the row
+    marginVertical: 4,
+  },
+  
+  statusLabel: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 4,
+    fontSize: 12,
+  },
+  
+  barBackground: {
+    height: 12,
+    backgroundColor: '#333',
+    borderRadius: 6,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  
+  barFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  
+  percentageTextCentered: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    lineHeight: 12,
+    backgroundColor: 'transparent',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 1,
+  },
+
+  // Update money indicator to include streak
+  moneyIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 9999,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+  },
+  
+  streakContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  
+  streakIcon: {
+    fontSize: 24,
+    marginRight: 5,
+  },
+  
+  streakCount: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+
+  // Add these styles to the end of the StyleSheet:
+  storageTitleContainer: {
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  storageTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  closeButton: {
+    backgroundColor: 'rgba(255, 30, 30, 0.8)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  petOptionsContainer: {
+    position: 'absolute',
+    bottom: '30%',  
+    left: '10%',
+    right: '10%',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(40, 40, 60, 0.85)',
+    borderRadius: 20,
+    padding: 15,
+    zIndex: 1000,
+    borderWidth: 2,
+    borderColor: '#5D9CEC',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  petOptionButton: {
+    backgroundColor: 'rgba(93, 156, 236, 0.7)',
+    paddingVertical: 15,
+    paddingHorizontal: 25,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 10,
+    elevation: 3,
+    flex: 1,
+    minWidth: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  petOptionButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginTop: 5,
+  },
+  modeToggleButton: {
+    position: 'absolute',
+    bottom: '20%',
+    left: 20,
+    backgroundColor: 'rgba(40, 40, 60, 0.9)',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    zIndex: 9999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#5D9CEC',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  modeToggleIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  modeToggleText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  removeButton: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255,0,0,0.7)',
+    borderRadius: 10,
+    padding: 5,
+    zIndex: 1002,
+  },
+  removeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  diamondContainer: {
+    backgroundColor: 'rgba(50, 100, 150, 0.8)',
+    borderRadius: 15,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: '#00BFFF',
+    elevation: 3,
+    shadowColor: '#00BFFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+  },
+  diamondIcon: {
+    fontSize: 20,
+    marginRight: 5,
+  },
+  diamondText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  quickActionsContainer: {
+    position: 'absolute',
+    top: 180, // Move it down to avoid blocking the status bar
+    left: 15,
+    flexDirection: 'column',
+    zIndex: 1000,
+  },
+  quickActionButton: {
+    backgroundColor: 'rgba(40, 40, 60, 0.9)',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#5D9CEC',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  quickActionIcon: {
+    fontSize: 30,
+    color: 'white',
+  },
+  quickActionText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  emptyStorageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+    marginTop: 50,
+  },
+  emptyStorageText: {
+    color: 'white',
+    fontSize: 18,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  shopButtonContainer: {
+    padding: 15,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  shopButton: {
+    backgroundColor: '#9C27B0',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  shopButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Add furniture styling
+  furnitureImageContainer: {
+    overflow: 'hidden',
+    marginVertical: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 50,
+    minHeight: 50,
+  },
+  placedFurnitureItem: {
+    borderColor: '#4CAF50',
+    borderWidth: 2,
+    backgroundColor: 'rgba(50, 80, 50, 0.7)',
+  },
+  furnitureName: {
+    color: 'white',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  // Add furniture styling
+  furnitureImageContainer: {
+    overflow: 'hidden',
+    marginVertical: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 50,
+    minHeight: 50,
+  },
+  furnitureItem: {
+    backgroundColor: 'rgba(40, 40, 60, 0.8)',
+    borderRadius: 10,
+    padding: 8,
+    margin: 5,
+    alignItems: 'center',
+    justifyContent: 'center', 
+    minWidth: 80,
+    minHeight: 100,
+  },
+  // Add a style for active button
+  activeQuickActionButton: {
+    backgroundColor: 'rgba(93, 156, 236, 0.9)',
+    borderColor: '#8AC7FF',
+  },
+  
+  // Add style for disabled button
+  disabledQuickActionButton: {
+    opacity: 0.5,
+  },
+  testButton: {
+    backgroundColor: '#FF5722',
+  },
+  previewImageContainer: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  foodEmojiPreview: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  feedButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 25,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  ownedQuantityText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1001,
+  },
+  modalCloseButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  resetButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 0, 0, 0.5)',
+    borderRadius: 10,
+    padding: 5,
+    zIndex: 1003,
+  },
+  resetButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  loadingSubText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  hiddenPreloader: {
+    position: 'absolute',
+    top: -5000, // Position far off-screen
+    left: -5000,
+    width: frameWidth * 2, // Make it large enough to render the animations
+    height: frameHeight * 2,
+    opacity: 0, // Completely invisible
+    overflow: 'hidden',
+    zIndex: -1, // Behind everything
+  },
+});
+
+// Export styles for consumption by other components
+export { styles };
+
+export function ChestAnimationScreen({ chestIndex, onComplete }) {
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [animationComplete, setAnimationComplete] = useState(false);
+  const [showRewards, setShowRewards] = useState(false);
+  
+  // Animation values for the chest
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  
+  // Generate random rewards based on chest type
+  const [rewards, setRewards] = useState({
+    gold: 0,
+    food: []
+  });
+  
+  // Correct chest positions for animation (each chest is 48x32, at 0,0, 0,64, 0,128, 0,192)
+  const chestPositions = [
+    { x: 0, y: 0 },    // First chest
+    { x: 0, y: 64 },   // Second chest
+    { x: 0, y: 128 },  // Third chest
+    { x: 0, y: 192 }   // Fourth chest
+  ];
+  
+  const { x, y } = chestPositions[chestIndex];
+  
+  // Calculate frames for this chest (5 frames per row, 2 rows per chest)
+  const totalFrames = CHEST_FRAMES_PER_ROW * 2; // 10 frames total
+  
+  // Generate random rewards when component mounts
+  useEffect(() => {
+    // More valuable chests give better rewards
+    const minGold = 50 + (chestIndex * 50);
+    const maxGold = 100 + (chestIndex * 100);
+    const goldAmount = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
+    
+    // Random food items
+    const foodItems = ['Kibble', 'Fish', 'Chicken', 'Milk', 'CatTreat', 'Tuna', 'Meat', 'Shrimp'];
+    const numFoodItems = Math.min(3, 1 + chestIndex); // More valuable chests give more items
+    
+    const selectedFood = [];
+    for (let i = 0; i < numFoodItems; i++) {
+      const randomIndex = Math.floor(Math.random() * foodItems.length);
+      const quantity = Math.floor(Math.random() * 3) + 1; // 1-3 of each item
+      selectedFood.push({ name: foodItems[randomIndex], quantity });
+    }
+    
+    setRewards({
+      gold: goldAmount,
+      food: selectedFood
+    });
+  }, [chestIndex]);
+  
+  // Start animation sequence
+  useEffect(() => {
+    // Fade in and scale up
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 2.5,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      })
+    ]).start();
+    
+    // Start frame animation after a short delay
+    const timeout = setTimeout(() => {
+      // Animate through all frames
+      const interval = setInterval(() => {
+        setFrameIndex(prev => {
+          const nextFrame = prev + 1;
+          
+          // If we've gone through all frames, show rewards
+          if (nextFrame >= totalFrames) {
+            clearInterval(interval);
+            
+            // Delay showing rewards to show the final frame
+            setTimeout(() => {
+              setAnimationComplete(true);
+              setShowRewards(true);
+            }, 500);
+            
+            return totalFrames - 1; // Stay on last frame
+          }
+          
+          return nextFrame;
+        });
+      }, CHEST_ANIMATION_INTERVAL);
+      
+      return () => clearInterval(interval);
+    }, 800);
+    
+    return () => clearTimeout(timeout);
+  }, []);
+  
+  // Calculate position within sprite sheet based on frame
+  // Frames are CHEST_FRAME_WIDTH (48px) wide and CHEST_FRAME_HEIGHT (32px) tall
+  const frameRow = Math.floor(frameIndex / CHEST_FRAMES_PER_ROW);
+  const frameCol = frameIndex % CHEST_FRAMES_PER_ROW;
+  
+  const frameX = x + (frameCol * CHEST_FRAME_WIDTH);
+  const frameY = y + (frameRow * CHEST_FRAME_HEIGHT);
+  
+  // Get food emoji based on name
+  const getFoodEmoji = (foodName) => {
+    const foodEmojis = {
+      'Kibble': '🥫',
+      'Fish': '🐟',
+      'Chicken': '🍗',
+      'Milk': '🥛',
+      'CatTreat': '🍪',
+      'Tuna': '🐠',
+      'Meat': '🥩',
+      'Shrimp': '🦐'
+    };
+    return foodEmojis[foodName] || '🍽️';
+  };
+  
+  // Handler for closing the rewards screen
+  const handleClose = () => {
+    // Pass back the rewards and chest index
+    // Setting true for the third argument indicates this chest should be emptied
+    onComplete && onComplete(rewards, chestIndex, true);
+  };
+  
+  // Adjusted height for animation (remove 7px from top)
+  const adjustedFrameHeight = 25; // 32px - 7px = 25px
+  
+  return (
+    <View style={styles.chestAnimationContainer}>
+      <TouchableOpacity 
+        style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0 
+        }}
+        activeOpacity={1}
+        onPress={handleClose}
+      />
+      
+      {/* Chest Animation */}
+      {!showRewards && (
+        <Animated.View style={[
+          styles.chestAnimationWrapper,
+          {
+            opacity,
+            transform: [{ scale }]
+          }
+        ]}>
+          <View style={{
+            width: CHEST_FRAME_WIDTH,
+            height: adjustedFrameHeight, // Use adjusted height
+            overflow: 'hidden',
+            marginTop: -3, // Fix vertical alignment
+          }}>
+            <Image
+              source={require('../asset/Chests.png')}
+              style={{
+                position: 'absolute',
+                top: -(frameY + 7), // Add 7px offset to crop the top
+                left: -frameX,
+                width: 240,
+                height: 256,
+              }}
+            />
+          </View>
+        </Animated.View>
+      )}
+      
+      {/* Rewards Display */}
+      {showRewards && (
+        <TouchableOpacity 
+          activeOpacity={1}
+          style={styles.rewardsContainer}
+          onPress={handleClose}
+        >
+          <Text style={styles.rewardsTitle}>Rewards</Text>
+          
+          <View style={styles.goldReward}>
+            <Text style={styles.goldIcon}>💰</Text>
+            <Text style={styles.goldAmount}>{rewards.gold}</Text>
+          </View>
+          
+          <View style={styles.foodRewardsContainer}>
+            {rewards.food.map((food, index) => (
+              <View key={index} style={styles.foodItem}>
+                <Text style={styles.foodEmoji}>{getFoodEmoji(food.name)}</Text>
+                <Text style={styles.foodName}>{food.name}</Text>
+              </View>
+            ))}
+          </View>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}

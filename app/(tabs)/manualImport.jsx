@@ -12,12 +12,12 @@ import {
   ActivityIndicator,
   Modal,
   ImageBackground,
-  SafeAreaView
+  SafeAreaView,
+  Alert
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 
 const db = SQLite.openDatabaseSync('mydb.db');
 const UNSPLASH_ACCESS_KEY = 'XLXdkohIyYL6-UZ7IPua_sUcUi2k_BgDtPXkrbh7HJw';
@@ -33,6 +33,7 @@ const getDefaultTrackingData = () => {
     consecutiveCorrectAnswersCount: 0,
     wrongQueue: [false, 0],
     easeFactor: 2,
+    exp: 0,
   };
 };
 
@@ -60,10 +61,7 @@ const defaultExamples = [
   }
 ];
 
-export default function App() {
-  const router = useRouter();
-  const { cards } = useLocalSearchParams();
-
+export default function ManualImport({ initialCards, onDeckSaved, onInputsChange }) {
   const [globalCheckbox, setGlobalCheckbox] = useState(false);
   const [inputTitle, setInputTitle] = useState('');
   
@@ -122,6 +120,25 @@ export default function App() {
   useEffect(() => {
     setSelectedExamples(inputs.map(() => 0));
   }, [inputs.length]);
+
+  // Check if we have any non-empty inputs and notify parent
+  useEffect(() => {
+    const hasContent = inputs.some(item => 
+      item.front.trim() !== '' || item.back.trim() !== ''
+    );
+    
+    if (onInputsChange) {
+      onInputsChange(hasContent);
+    }
+  }, [inputs]);
+
+  // Use initialCards from props if available
+  useEffect(() => {
+    if (initialCards && initialCards.length > 0) {
+      setInputs(initialCards);
+      setSelectedExamples(initialCards.map(() => 0));
+    }
+  }, [initialCards]);
 
   // When "Search for Image" is pressed, open the modal and clear previous selections.
   const onOpenImageSearch = (cardIndex) => {
@@ -213,33 +230,6 @@ export default function App() {
     setInputs(newInputs);
   };
 
-  // Parse passed cards from router params.
-  useEffect(() => {
-    if (cards) {
-      try {
-        const parsedCards = JSON.parse(cards);
-        const newInputs = parsedCards.map(card => ({
-          front: card.front || '',
-          back: card.back || '',
-          phonetic: card.phonetic || '',
-          imageUrl: card.imageUrl || '',
-          unsplashImages: card.unsplashImages || [],
-          examples: card.examples || defaultExamples,
-          frontAudio: card.frontAudio || '',
-          lastReviewDate: card.lastReviewDate || new Date().toISOString(),
-          nextReviewDate: card.nextReviewDate || new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-          consecutiveCorrectAnswersCount: card.consecutiveCorrectAnswersCount || 0,
-          wrongQueue: card.wrongQueue || [false, 0],
-          easeFactor: card.easeFactor || 2,
-        }));
-        setInputs(newInputs);
-        setSelectedExamples(newInputs.map(() => 0));
-      } catch (err) {
-        console.error("Error parsing generated cards:", err);
-      }
-    }
-  }, [cards]);
-
   // Play audio helper.
   const playAudio = async (fileUri) => {
     if (!fileUri) {
@@ -257,7 +247,11 @@ export default function App() {
 
   // Save deck.
   const onSubmit = async () => {
-    if (!inputTitle.trim()) return;
+    if (!inputTitle.trim()) {
+      Alert.alert('Error', 'Please enter a deck title');
+      return;
+    }
+    
     try {
       db.execSync(`
         CREATE TABLE IF NOT EXISTS ${inputTitle} (
@@ -273,9 +267,11 @@ export default function App() {
           consecutiveCorrectAnswersCount INTEGER,
           wrongQueue TEXT,
           easeFactor REAL,
-          frontAudio TEXT
+          frontAudio TEXT,
+          exp INTEGER
         )
       `);
+      
       for (let card of inputs) {
         if (card.imageUrl && !card.imageUrl.startsWith(FileSystem.documentDirectory)) {
           const fileName = `unsplash_${Date.now()}_${Math.random().toString(36).substring(2,8)}.jpg`;
@@ -288,14 +284,17 @@ export default function App() {
           }
         }
       }
-      inputs.forEach(({ front, back, phonetic, imageUrl, examples, unsplashImages, lastReviewDate, nextReviewDate, consecutiveCorrectAnswersCount, wrongQueue, easeFactor, frontAudio }) => {
+      
+      let cardsSaved = 0;
+      
+      inputs.forEach(({ front, back, phonetic, imageUrl, examples, unsplashImages, lastReviewDate, nextReviewDate, consecutiveCorrectAnswersCount, wrongQueue, easeFactor, frontAudio, exp }) => {
         if (front?.trim() && back?.trim()) {
           db.runSync(
             `INSERT INTO ${inputTitle} (
               front, back, phonetic, imageUrl, examples, unsplashImages, 
               lastReviewDate, nextReviewDate, consecutiveCorrectAnswersCount, wrongQueue, easeFactor,
-              frontAudio
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              frontAudio, exp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               front,
               back,
@@ -308,14 +307,30 @@ export default function App() {
               consecutiveCorrectAnswersCount,
               JSON.stringify(wrongQueue),
               easeFactor,
-              frontAudio
+              frontAudio,
+              exp || 0
             ]
           );
+          cardsSaved++;
         }
       });
-      console.log('Deck saved successfully!');
+      
+      // Instead of console logging, show a brief success message and navigate
+      if (cardsSaved > 0) {
+        Alert.alert('Success', `Saved ${cardsSaved} cards to deck "${inputTitle}"`, [
+          { text: 'OK', onPress: () => {
+            // Call the callback to navigate to Browse Deck
+            if (onDeckSaved) {
+              onDeckSaved(inputTitle);
+            }
+          }}
+        ]);
+      } else {
+        Alert.alert('Warning', 'No cards were saved. Make sure cards have both front and back filled in.');
+      }
     } catch (e) {
       console.error('Submission error:', e);
+      Alert.alert('Error', 'Failed to save deck: ' + e.message);
     }
   };
 
@@ -375,18 +390,28 @@ export default function App() {
   return (
     <ImageBackground source={require('../asset/background.png')} style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
+        {/* Non-sticky header with title */}
+        <View style={{ alignItems: 'center', marginTop: 40, marginBottom: 5 }}>
+          <Text style={styles.stepTitle}>Manual Import</Text>
+        </View>
+        
+        {/* Sticky Deck Title and Save Button */}
+        <View style={styles.stickyHeader}>
+          <View style={styles.deckTitleInput}>
+            <TextInput
+              style={styles.titleInput}
+              placeholder="Deck Title"
+              placeholderTextColor="white"
+              value={inputTitle}
+              onChangeText={setInputTitle}
+            />
+          </View>
+          <TouchableOpacity style={styles.saveDeckButton} onPress={onSubmit}>
+            <Text style={styles.saveDeckButtonText}>Save Deck</Text>
+          </TouchableOpacity>
+        </View>
+        
         <ScrollView contentContainerStyle={styles.container}>
-          {/* Top Section */}
-          <View style={{ alignItems: 'center', marginBottom: 30 }}>
-            <Text style={{ fontSize: 30, color: '#fff' }}>Create New Flash Card</Text>
-          </View>
-          
-          <View style={styles.aiButtonContainer}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.aiButton}>
-              <Text style={styles.aiButtonText}>Generate With AI</Text>
-            </TouchableOpacity>
-          </View>
-          
           <View style={styles.globalToggleContainer}>
             <Text style={styles.globalToggleLabel}>Show Phonetic</Text>
             <Switch value={globalCheckbox} onValueChange={setGlobalCheckbox} />
@@ -614,21 +639,6 @@ export default function App() {
             </TouchableOpacity>
           </View>
           
-          {/* Deck Title Input */}
-          <View style={styles.topContainer}>
-            <Text style={styles.topLabel}>Word Deck Title</Text>
-            <TextInput
-              style={styles.titleInput}
-              placeholder="Enter deck title"
-              value={inputTitle}
-              onChangeText={setInputTitle}
-            />
-          </View>
-          
-          {/* Bottom Global Buttons */}
-          <TouchableOpacity style={styles.customButton} onPress={onSubmit}>
-            <Text style={styles.customButtonText}>Save Deck</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.customButton} onPress={loadAllDecks}>
             <Text style={styles.customButtonText}>Load All Decks</Text>
           </TouchableOpacity>
@@ -687,6 +697,7 @@ export default function App() {
               <Text>Consecutive Correct Answers: {item.consecutiveCorrectAnswersCount}</Text>
               <Text>Wrong Queue: {item.wrongQueue}</Text>
               <Text>Ease Factor: {item.easeFactor}</Text>
+              <Text>Experience Points: {item.exp || 0}</Text>
               <TouchableOpacity style={styles.deckButton} onPress={() => onDeleteCard(item.id)}>
                 <Text style={styles.deckButtonText}>Delete</Text>
               </TouchableOpacity>
@@ -778,22 +789,54 @@ export default function App() {
 const styles = StyleSheet.create({
   background: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
-  container: { padding: 20, paddingTop: 50, backgroundColor: 'transparent' },
-  topContainer: { marginBottom: 20 },
-  topLabel: { fontSize: 18, marginBottom: 6, color: '#fff' },
-  titleInput: { borderWidth: 1, padding: 12, borderRadius: 8, backgroundColor: '#2c2c2c', borderColor: '#404040', color: '#fff' },
-  aiButtonContainer: { alignItems: 'center', marginBottom: 20 },
-  aiButton: { 
-    backgroundColor: '#007AFF', 
-    paddingVertical: 14, 
-    paddingHorizontal: 24, 
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3
+  container: { padding: 20, paddingTop: 10, backgroundColor: 'transparent' },
+  stepIndicator: { 
+    fontSize: 16, 
+    color: '#fff', 
+    textAlign: 'center', 
+    marginBottom: 8 
   },
-  aiButtonText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  stepTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    color: '#00ff88', 
+    textAlign: 'center', 
+    marginBottom: 16 
+  },
+  stickyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    zIndex: 1000,
+  },
+  deckTitleInput: {
+    flex: 1,
+    marginRight: 10,
+  },
+  titleInput: {
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#2c2c2c',
+    borderColor: '#404040',
+    color: '#fff',
+    height: 45,
+  },
+  saveDeckButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 10,
+    justifyContent: 'center',
+  },
+  saveDeckButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
   globalToggleContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 20 },
   globalToggleLabel: { fontSize: 16, marginRight: 8, color: '#fff' },
   cardContainer: { 

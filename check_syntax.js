@@ -1,0 +1,1 @@
+import { jsx } from 'react/jsx-runtime'; try { require('@babel/parser').parse(require('fs').readFileSync('app/(tabs)/CatSection.jsx', 'utf8'), { sourceType: 'module', plugins: ['jsx', 'typescript'] }); console.log('File successfully parsed!'); } catch (e) { console.error('Error:', e.message, 'at line', e.loc?.line); }

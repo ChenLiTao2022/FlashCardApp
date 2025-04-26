@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,15 +11,12 @@ import {
 export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState(null);
-  const [questionExample, setQuestionExample] = useState(null);
-  const [answerExample, setAnswerExample] = useState(null);
+  const [displayedMeaning, setDisplayedMeaning] = useState(null);
   const [selectedChoice, setSelectedChoice] = useState(null); // null, 'pair', 'notPair'
   const [answered, setAnswered] = useState(false);
+  const [isPair, setIsPair] = useState(false);
   
-  // Determine if the question and answer pair (50% chance)
-  const isPair = useMemo(() => Math.random() < 0.5, [questionExample, answerExample]);
-
-  // Initialize and select a random card and examples
+  // Initialize and select a random card
   useEffect(() => {
     if (!dueCards || dueCards.length === 0) return;
     
@@ -27,47 +24,35 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
       setLoading(true);
       
       try {
-        // Select a random card that has examples
-        const cardsWithExamples = dueCards.filter(card => {
-          try {
-            const examples = card.examples ? JSON.parse(card.examples) : [];
-            return examples.length > 1; // Need at least 2 examples
-          } catch (e) {
-            return false;
-          }
-        });
-        
-        if (cardsWithExamples.length === 0) {
-          Alert.alert('Not Enough Examples', 'None of the cards have enough example sentences.');
-          return;
-        }
-        
-        const randomCard = cardsWithExamples[Math.floor(Math.random() * cardsWithExamples.length)];
+        // Select a random card from due cards
+        const randomCard = dueCards[Math.floor(Math.random() * dueCards.length)];
         setSelectedCard(randomCard);
         
-        // Parse examples and select two random ones
-        const examples = JSON.parse(randomCard.examples);
+        // Determine if this should be a pair (50% chance)
+        const shouldBePair = Math.random() < 0.5;
+        setIsPair(shouldBePair);
         
-        // Select a random question example
-        const questionIndex = Math.floor(Math.random() * examples.length);
-        const question = examples[questionIndex];
-        setQuestionExample(question);
-        
-        // For the answer, either use the matching answer or a random different answer
-        if (isPair) {
-          // If pair, use the matching answer
-          setAnswerExample(question);
+        // For the meaning, either use the matching meaning or a random different meaning
+        if (shouldBePair) {
+          // If pair, use the card's own meaning
+          setDisplayedMeaning(randomCard.back);
         } else {
-          // If not pair, use a different example's answer
-          const otherExamples = examples.filter((_, index) => index !== questionIndex);
-          const randomOtherExample = otherExamples[Math.floor(Math.random() * otherExamples.length)];
-          setAnswerExample(randomOtherExample);
+          // If not pair, use a different card's meaning
+          const otherCards = dueCards.filter(card => card.id !== randomCard.id);
+          if (otherCards.length === 0) {
+            // If no other cards available, still use a different meaning
+            // This is just a fallback in case there's only one card
+            setDisplayedMeaning("Different meaning for testing");
+          } else {
+            const randomOtherCard = otherCards[Math.floor(Math.random() * otherCards.length)];
+            setDisplayedMeaning(randomOtherCard.back);
+          }
         }
         
         setLoading(false);
       } catch (error) {
         console.error("Error initializing PairOrNotPair:", error);
-        Alert.alert('Error', 'Could not load example sentences');
+        Alert.alert('Error', 'Could not load cards');
         setLoading(false);
       }
     };
@@ -93,15 +78,13 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
     let popupString = '';
     
     if (selectedCard) {
-      popupString += `${selectedCard.front}\n`;
-      if (selectedCard.phonetic) popupString += `${selectedCard.phonetic}\n`;
-      if (selectedCard.back) popupString += `${selectedCard.back}\n`;
+      popupString += `Word: ${selectedCard.front}\n`;
+      if (selectedCard.phonetic) popupString += `Phonetic: ${selectedCard.phonetic}\n`;
+      popupString += `Actual meaning: ${selectedCard.back}\n`;
+      popupString += `Displayed meaning: ${displayedMeaning}\n`;
+      popupString += `They ${isPair ? 'DO' : 'DO NOT'} form a pair.\n`;
+      popupString += `Your answer: ${choice === 'pair' ? 'They pair' : 'They don\'t pair'}\n`;
     }
-    
-    popupString += `Question: ${questionExample.question}\n`;
-    popupString += `Answer: ${answerExample.answer}\n`;
-    popupString += `They ${isPair ? 'DO' : 'DO NOT'} form a pair.\n`;
-    popupString += `Your answer: ${choice === 'pair' ? 'They pair' : 'They don\'t pair'}\n`;
     
     // Call the onAnswer callback with the result
     onAnswer?.(isCorrect, popupString);
@@ -112,46 +95,37 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading examples...</Text>
+        <Text style={styles.loadingText}>Loading cards...</Text>
       </View>
     );
   }
   
-  // Handle case where no card or examples could be found
-  if (!selectedCard || !questionExample || !answerExample) {
+  // Handle case where no card could be found
+  if (!selectedCard || !displayedMeaning) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Not enough examples available</Text>
+        <Text style={styles.errorText}>Not enough cards available</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Do These Sentences Match?</Text>
+      <Text style={styles.title}>Do These Match?</Text>
       
-      {/* Question Section */}
+      {/* Word Section */}
       <View style={styles.sentenceContainer}>
-        <Text style={styles.sentenceLabel}>Question:</Text>
-        <Text style={styles.sentenceText}>{questionExample.question}</Text>
-        {questionExample.questionPhonetic && (
-          <Text style={styles.phoneticText}>{questionExample.questionPhonetic}</Text>
-        )}
-        {questionExample.questionTranslation && (
-          <Text style={styles.translationText}>{questionExample.questionTranslation}</Text>
+        <Text style={styles.sentenceLabel}>Word:</Text>
+        <Text style={styles.sentenceText}>{selectedCard.front}</Text>
+        {selectedCard.phonetic && (
+          <Text style={styles.phoneticText}>{selectedCard.phonetic}</Text>
         )}
       </View>
       
-      {/* Answer Section */}
+      {/* Meaning Section */}
       <View style={styles.sentenceContainer}>
-        <Text style={styles.sentenceLabel}>Answer:</Text>
-        <Text style={styles.sentenceText}>{answerExample.answer}</Text>
-        {answerExample.answerPhonetic && (
-          <Text style={styles.phoneticText}>{answerExample.answerPhonetic}</Text>
-        )}
-        {answerExample.translation && (
-          <Text style={styles.translationText}>{answerExample.translation}</Text>
-        )}
+        <Text style={styles.sentenceLabel}>Meaning:</Text>
+        <Text style={styles.sentenceText}>{displayedMeaning}</Text>
       </View>
       
       {/* Choices */}
@@ -197,7 +171,7 @@ export default function PairOrNotPair({ dueCards, onAnswer, showResult }) {
               : "Incorrect"}
           </Text>
           <Text style={styles.answerText}>
-            These sentences {isPair ? 'DO match' : 'DO NOT match'}.
+            These {isPair ? 'DO match' : 'DO NOT match'}.
           </Text>
         </View>
       )}
