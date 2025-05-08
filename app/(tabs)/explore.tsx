@@ -1,5 +1,4 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Image, StyleSheet } from 'react-native';
 
 import { Collapsible } from '@/components/Collapsible';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -70,7 +69,7 @@ export default function TabTwoScreen() {
         <ThemedText>
           This template has light and dark mode support. The{' '}
           <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
+          what the user's current color scheme is, and so you can adjust UI colors accordingly.
         </ThemedText>
         <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
           <ThemedText type="link">Learn more</ThemedText>
@@ -83,14 +82,10 @@ export default function TabTwoScreen() {
           the powerful <ThemedText type="defaultSemiBold">react-native-reanimated</ThemedText>{' '}
           library to create a waving hand animation.
         </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
+        <ThemedText>
+          The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
+          component provides a parallax effect for the header image.
+        </ThemedText>
       </Collapsible>
     </ParallaxScrollView>
   );
